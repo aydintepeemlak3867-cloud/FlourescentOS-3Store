@@ -1,0 +1,50 @@
+import sys
+import random
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton
+
+class GuessGame(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Child App - Number Guess Game")
+        self.resize(300, 150)
+
+        self.secret = random.randint(1, 100)
+        self.attempts = 0
+
+        layout = QVBoxLayout()
+        self.label = QLabel("Guess a number (1-100):")
+        layout.addWidget(self.label)
+
+        self.input = QLineEdit()
+        layout.addWidget(self.input)
+
+        self.button = QPushButton("Check")
+        self.button.clicked.connect(self.check_guess)
+        layout.addWidget(self.button)
+
+        self.result = QLabel("")
+        layout.addWidget(self.result)
+
+        self.setLayout(layout)
+
+    def check_guess(self):
+        try:
+            guess = int(self.input.text())
+        except ValueError:
+            self.result.setText("Enter a valid number!")
+            return
+
+        self.attempts += 1
+
+        if guess < self.secret:
+            self.result.setText("Too low!")
+        elif guess > self.secret:
+            self.result.setText("Too high!")
+        else:
+            self.result.setText(f"Correct! 🎉 Attempts: {self.attempts}")
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = GuessGame()
+    window.show()
+    sys.exit(app.exec())
