@@ -1,0 +1,56 @@
+
+import sys, platform, psutil
+import cpuinfo
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QTabWidget
+
+class SysInfoApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("FlourescentOS Peripheral Tester-Z")
+        self.resize(600, 400)
+
+        layout = QVBoxLayout()
+        tabs = QTabWidget()
+
+        # CPU Tab
+        cpu_tab = QWidget()
+        cpu_layout = QVBoxLayout()
+        info = cpuinfo.get_cpu_info()
+        cpu_layout.addWidget(QLabel(f"CPU: {info['brand_raw']}"))
+        cpu_layout.addWidget(QLabel(f"Cores: {psutil.cpu_count(logical=False)}"))
+        cpu_layout.addWidget(QLabel(f"Threads: {psutil.cpu_count(logical=True)}"))
+        cpu_layout.addWidget(QLabel(f"Arch: {platform.machine()}"))
+        cpu_layout.addWidget(QLabel(f"Frequency: {psutil.cpu_freq().current:.2f} MHz"))
+        cpu_tab.setLayout(cpu_layout)
+        tabs.addTab(cpu_tab, "CPU")
+
+        # RAM Tab
+        ram_tab = QWidget()
+        ram_layout = QVBoxLayout()
+        ram = psutil.virtual_memory()
+        ram_layout.addWidget(QLabel(f"Total RAM: {ram.total / (1024**3):.2f} GB"))
+        ram_layout.addWidget(QLabel(f"Available: {ram.available / (1024**3):.2f} GB"))
+        ram_tab.setLayout(ram_layout)
+        tabs.addTab(ram_tab, "RAM")
+
+        # Disk Tab (Sadece E sürücüsü)
+        disk_tab = QWidget()
+        disk_layout = QVBoxLayout()
+        try:
+            usage = psutil.disk_usage("C:\\")
+            disk_layout.addWidget(QLabel(f"E: - {usage.total / (1024**3):.2f} GB"))
+            disk_layout.addWidget(QLabel(f"Used: {usage.used / (1024**3):.2f} GB"))
+            disk_layout.addWidget(QLabel(f"Free: {usage.free / (1024**3):.2f} GB"))
+        except PermissionError:
+            disk_layout.addWidget(QLabel("E: erişilemez (hazır değil)"))
+        disk_tab.setLayout(disk_layout)
+        tabs.addTab(disk_tab, "Disk")
+
+        layout.addWidget(tabs)
+        self.setLayout(layout)
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    win = SysInfoApp()
+    win.show()
+    sys.exit(app.exec())
