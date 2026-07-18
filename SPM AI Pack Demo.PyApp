@@ -1,0 +1,1122 @@
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QPushButton
+import random
+
+class IlgınAI(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Ilgın - Psikolojik Rehber")
+        self.resize(500, 400)
+
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        self.chat_area = QTextEdit()
+        self.chat_area.setReadOnly(True)
+        layout.addWidget(self.chat_area)
+
+        self.input_area = QTextEdit()
+        self.input_area.setFixedHeight(60)
+        layout.addWidget(self.input_area)
+
+        send_btn = QPushButton("Gönder")
+        send_btn.clicked.connect(self.send_message)
+        layout.addWidget(send_btn)
+
+        # Model özellikleri
+        self.params = 16384
+        self.max_output_tokens = 1000
+
+        # 100 farklı yanıt (örnek olarak ilk 10’u gösteriyorum)
+        self.responses = [
+"yanıt: Seni anlıyorum, bu duygularla baş etmek kolay değil.",
+"yanıt: Kendine zaman tanıman çok önemli.",
+"yanıt: Bunu paylaşman cesaret gerektirir, tebrik ederim.",
+"yanıt: Zor bir süreç olabilir ama yalnız değilsin.",
+"yanıt: Her duygunun bir anlamı vardır, onları bastırma.",
+"yanıt: Kendi iç sesini dinlemek iyileşmenin ilk adımıdır.",
+"yanıt: Bazen küçük adımlar büyük değişim yaratır.",
+"yanıt: Nefes egzersizleri sana yardımcı olabilir.",
+"yanıt: Günlük yazılar yazmak duygularını düzenler.",
+"yanıt: Güvendiğin biriyle konuşmak seni rahatlatır.",
+"yanıt: Sabırlı ol, süreç zaman alabilir.",
+"yanıt: Kendine şefkat göstermek çok önemlidir.",
+"yanıt: Zihnin karmaşık olabilir ama sen kontrol edebilirsin.",
+"yanıt: Paylaşmak yükünü hafifletir.",
+"yanıt: Kendi ihtiyaçlarını fark etmek seni güçlendirir.",
+"yanıt: Duygularını kabul etmek iyileşmenin başlangıcıdır.",
+"yanıt: Kendini ifade etmek seni özgürleştirir.",
+"yanıt: Zor zamanlarda destek almak önemlidir.",
+"yanıt: Küçük başarılarını kutlamayı unutma.",
+"yanıt: Kendi değerini bilmek seni korur.",
+"yanıt: Hayat bazen ağır gelebilir ama sen güçlüsün.",
+"yanıt: Kendi sınırlarını çizmek sağlıklıdır.",
+"yanıt: Duygularını anlamak seni daha bilinçli yapar.",
+"yanıt: Kendine güvenmek iyileşmenin anahtarıdır.",
+"yanıt: Her gün biraz daha iyi olabilirsin."
+"yanıt: İçinde bulunduğun durumu kabul etmek seni rahatlatır.",
+"yanıt: Zor zamanlarda nefes almak bile güç verir.",
+"yanıt: Kendini dinlemek en büyük rehberindir.",
+"yanıt: Duygularını yazıya dökmek seni özgürleştirir.",
+"yanıt: Küçük adımlar seni ileriye taşır.",
+"yanıt: Kendine güvenmek seni güçlü kılar.",
+"yanıt: Paylaşmak seni hafifletir.",
+"yanıt: Sabırlı olmak sürecin anahtarıdır.",
+"yanıt: Kendine şefkat göstermek iyileştirir.",
+"yanıt: Zihnin karmaşık olabilir ama sen yolunu bulabilirsin.",
+"yanıt: Kendi ihtiyaçlarını fark etmek seni bilinçli yapar.",
+"yanıt: Duygularını kabul etmek seni özgürleştirir.",
+"yanıt: Kendini ifade etmek seni rahatlatır.",
+"yanıt: Zor zamanlarda destek almak önemlidir.",
+"yanıt: Küçük başarılarını kutlamak seni motive eder.",
+"yanıt: Kendi değerini bilmek seni korur.",
+"yanıt: Hayat bazen ağır gelebilir ama sen güçlüsün.",
+"yanıt: Kendi sınırlarını çizmek sağlıklıdır.",
+"yanıt: Duygularını anlamak seni bilinçli yapar.",
+"yanıt: Kendine güvenmek seni ileriye taşır.",
+"yanıt: Her gün biraz daha iyi olabilirsin.",
+"yanıt: İçsel huzur zamanla gelir.",
+"yanıt: Kendini olduğun gibi kabul et.",
+"yanıt: Zor zamanlar seni güçlendirir.",
+"yanıt: Paylaşmak seni daha güçlü yapar."
+"yanıt: Kendine zaman tanımak iyileşmenin anahtarıdır.",
+"yanıt: Duygularını bastırma, onları yaşa.",
+"yanıt: Küçük adımlar seni ileriye taşır.",
+"yanıt: Nefes almak seni rahatlatır.",
+"yanıt: Günlük yazılar seni özgürleştirir.",
+"yanıt: Güvendiğin biriyle konuşmak seni hafifletir.",
+"yanıt: Sabırlı olmak seni güçlü yapar.",
+"yanıt: Kendine şefkat göstermek seni iyileştirir.",
+"yanıt: Zihnin karmaşık olabilir ama sen yolunu bulabilirsin.",
+"yanıt: Paylaşmak seni hafifletir.",
+"yanıt: Kendi ihtiyaçlarını fark etmek seni bilinçli yapar.",
+"yanıt: Duygularını kabul etmek seni özgürleştirir.",
+"yanıt: Kendini ifade etmek seni rahatlatır.",
+"yanıt: Zor zamanlarda destek almak seni güçlü yapar.",
+"yanıt: Küçük başarılarını kutlamak seni motive eder.",
+"yanıt: Kendi değerini bilmek seni korur.",
+"yanıt: Hayat bazen ağır gelebilir ama sen güçlüsün.",
+"yanıt: Kendi sınırlarını çizmek seni sağlıklı yapar.",
+"yanıt: Duygularını anlamak seni bilinçli yapar.",
+"yanıt: Kendine güvenmek seni ileriye taşır.",
+"yanıt: Her gün biraz daha iyi olabilirsin.",
+"yanıt: İçsel huzur zamanla gelir.",
+"yanıt: Kendini olduğun gibi kabul et.",
+"yanıt: Zor zamanlar seni güçlendirir.",
+"yanıt: Paylaşmak seni daha güçlü yapar."
+"yanıt: Kendine zaman tanımak seni iyileştirir.",
+"yanıt: Duygularını bastırma, onları yaşa.",
+"yanıt: Küçük adımlar seni ileriye taşır.",
+"yanıt: Nefes almak seni rahatlatır.",
+"yanıt: Günlük yazılar seni özgürleştirir.",
+"yanıt: Güvendiğin biriyle konuşmak seni hafifletir.",
+"yanıt: Sabırlı olmak seni güçlü yapar.",
+"yanıt: Kendine şefkat göstermek seni iyileştirir.",
+"yanıt: Zihnin karmaşık olabilir ama sen yolunu bulabilirsin.",
+"yanıt: Paylaşmak seni hafifletir.",
+"yanıt: Kendi ihtiyaçlarını fark etmek seni bilinçli yapar.",
+"yanıt: Duygularını kabul etmek seni özgürleştirir.",
+"yanıt: Kendini ifade etmek seni rahatlatır.",
+"yanıt: Zor zamanlarda destek almak seni güçlü yapar.",
+"yanıt: Küçük başarılarını kutlamak seni motive eder.",
+"yanıt: Kendi değerini bilmek seni korur.",
+"yanıt: Hayat bazen ağır gelebilir ama sen güçlüsün.",
+"yanıt: Kendi sınırlarını çizmek seni sağlıklı yapar.",
+"yanıt: Duygularını anlamak seni bilinçli yapar.",
+"yanıt: Kendine güvenmek seni ileriye taşır.",
+"yanıt: Her gün biraz daha iyi olabilirsin.",
+"yanıt: İçsel huzur zamanla gelir.",
+"yanıt: Kendini olduğun gibi kabul et.",
+"yanıt: Zor zamanlar seni güçlendirir.",
+"yanıt: Paylaşmak seni daha güçlü yapar."         
+        ]
+
+    def send_message(self):
+        user_text = self.input_area.toPlainText().strip()
+        if not user_text:
+            return
+
+        self.chat_area.append(f"Kullanıcı: {user_text}")
+        self.input_area.clear()
+
+        ai_response = random.choice(self.responses)
+        self.chat_area.append(f"Ilgın: {ai_response}\n\n(Output ~{self.max_output_tokens} tokens, Params={self.params})")
+
+
+
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QPushButton
+import random
+
+class RumeysaAI(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Rümeysa - Tıp Rehberi")
+        self.resize(500, 400)
+
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        self.chat_area = QTextEdit()
+        self.chat_area.setReadOnly(True)
+        layout.addWidget(self.chat_area)
+
+        self.input_area = QTextEdit()
+        self.input_area.setFixedHeight(60)
+        layout.addWidget(self.input_area)
+
+        send_btn = QPushButton("Gönder")
+        send_btn.clicked.connect(self.send_message)
+        layout.addWidget(send_btn)
+
+        # Model özellikleri
+        self.params = 16384
+        self.max_output_tokens = 1000
+
+        # Örnek yanıtlar (100 olacak, burada ilk 10’u gösteriyorum)
+        self.responses = [
+            "yanıt: Heimlich manevrası için kişinin arkasına geçip göğüs kafesinin altına baskı uygulamalısın.",
+            "yanıt: Kanama varsa temiz bir bezle basınç uygulamak gerekir.",
+            "yanıt: Yanık durumunda soğuk suyla bölgeyi yıkamak ilk adımdır.",
+            "yanıt: Burkulmalarda bölgeyi sabitlemek ve dinlendirmek önemlidir.",
+            "yanıt: Kalp masajı için göğüs kafesinin ortasına ritmik baskı yapılır.",
+            "yanıt: Zehirlenme şüphesinde kişiyi kusturmaya çalışma, hemen sağlık ekibini çağır.",
+            "yanıt: Şok durumunda kişiyi yatırıp ayaklarını hafifçe kaldırmak gerekir.",
+            "yanıt: Burun kanamasında baş hafifçe öne eğilmeli ve burun sıkılmalıdır.",
+            "yanıt: Elektrik çarpmasında önce güvenliği sağla, sonra kişiyi kontrol et.",
+            "yanıt: İlk yardımda en önemli şey sakin kalmaktır."
+            "yanıt: Heimlich manevrası için kişinin arkasına geçip göğüs kafesinin altına baskı uygulamalısın.",
+            "yanıt: Kanama varsa temiz bir bezle basınç uygulamak gerekir.",
+            "yanıt: Yanık durumunda soğuk suyla bölgeyi yıkamak ilk adımdır.",
+            "yanıt: Burkulmalarda bölgeyi sabitlemek ve dinlendirmek önemlidir.",
+            "yanıt: Kalp masajı için göğüs kafesinin ortasına ritmik baskı yapılır.",
+            "yanıt: Zehirlenme şüphesinde kişiyi kusturmaya çalışma, hemen sağlık ekibini çağır.",
+            "yanıt: Şok durumunda kişiyi yatırıp ayaklarını hafifçe kaldırmak gerekir.",
+            "yanıt: Burun kanamasında baş hafifçe öne eğilmeli ve burun sıkılmalıdır.",
+            "yanıt: Elektrik çarpmasında önce güvenliği sağla, sonra kişiyi kontrol et.",
+            "yanıt: İlk yardımda en önemli şey sakin kalmaktır.",
+            "yanıt: Kırık şüphesinde bölgeyi sabitle ve hareket ettirme.",
+            "yanıt: Bayılan kişiyi yan pozisyona getir.",
+            "yanıt: Boğulma durumunda acil yardım çağır ve müdahale et.",
+            "yanıt: Göz yaralanmalarında gözü ovuşturma, temiz suyla yıka.",
+            "yanıt: Zehirlenmede ambalajı sakla ve sağlık ekibine göster.",
+            "yanıt: Yanık bölgesine diş macunu veya yağ sürme, sadece su kullan.",
+            "yanıt: Burkulmalarda buz uygulamak şişliği azaltır.",
+            "yanıt: Kalp masajı 30 bası + 2 nefes şeklinde yapılır.",
+            "yanıt: Şokta kişiyi sıcak tutmak önemlidir.",
+            "yanıt: Kanama durmazsa acil yardım çağır.",
+            "yanıt: Burun kanamasında kafayı geriye atma, öne eğ.",
+            "yanıt: Elektrik çarpmasında çıplak elle dokunma.",
+            "yanıt: İlk yardımda panik yapmak durumu kötüleştirir.",
+            "yanıt: Kırıkta atel kullanmak doğru yöntemdir.",
+            "yanıt: Bayılan kişiyi asla suyla uyandırmaya çalışma."
+            "yanıt: Boğulma durumunda sırtına vurmak bazen işe yarar.",
+            "yanıt: Göz yaralanmalarında lens varsa çıkarma.",
+            "yanıt: Zehirlenmede kişiyi kusturma, profesyonel yardım bekle.",
+            "yanıt: Yanıkta kabarcıkları patlatma.",
+            "yanıt: Burkulmalarda elastik bandaj kullanabilirsin.",
+            "yanıt: Kalp masajı ritmi dakikada 100-120 bası olmalı.",
+            "yanıt: Şokta kişiyi konuşarak sakinleştirmeye çalış.",
+            "yanıt: Kanama varsa basınç uygularken elini kaldırma.",
+            "yanıt: Burun kanamasında 10 dakika boyunca burun sıkılmalı.",
+            "yanıt: Elektrik çarpmasında fişi çekmeden müdahale etme.",
+            "yanıt: İlk yardımda doğru bilgi hayat kurtarır.",
+            "yanıt: Kırık şüphesinde kişiyi hareket ettirme.",
+            "yanıt: Bayılan kişiyi güvenli bir yere yatır.",
+            "yanıt: Boğulma durumunda Heimlich manevrası hayat kurtarır.",
+            "yanıt: Göz yaralanmalarında göz kapalı tutulmalı.",
+            "yanıt: Zehirlenmede bol su içirme, kusturma yok.",
+            "yanıt: Yanıkta bölgeyi temiz tut.",
+            "yanıt: Burkulmalarda ayağı yukarı kaldırmak faydalıdır.",
+            "yanıt: Kalp masajında göğüs kafesi 5-6 cm çökmeli.",
+            "yanıt: Şokta kişiyi battaniye ile ört.",
+            "yanıt: Kanama durmazsa turnike uygulanabilir.",
+            "yanıt: Burun kanamasında baş öne eğilmeli.",
+            "yanıt: Elektrik çarpmasında kişiyi tahta ile ayır.",
+            "yanıt: İlk yardımda hızlı ama doğru hareket et.",
+            "yanıt: Kırıkta yanlış müdahale durumu kötüleştirir."
+            "yanıt: Bayılan kişiyi yan yatırmak solunumu kolaylaştırır.",
+            "yanıt: Boğulma durumunda acil yardım çağırmayı unutma.",
+            "yanıt: Göz yaralanmalarında göz kapalı tutulmalı.",
+            "yanıt: Zehirlenmede ambalajı saklamak önemlidir.",
+            "yanıt: Yanıkta bölgeyi temiz tutmak gerekir.",
+            "yanıt: Burkulmalarda ayağı yukarı kaldırmak faydalıdır.",
+            "yanıt: Kalp masajında göğüs kafesi 5-6 cm çökmeli.",
+            "yanıt: Şokta kişiyi battaniye ile örtmek gerekir.",
+            "yanıt: Kanama durmazsa turnike uygulanabilir.",
+            "yanıt: Burun kanamasında baş öne eğilmeli.",
+            "yanıt: Elektrik çarpmasında kişiyi tahta ile ayır.",
+            "yanıt: İlk yardımda hızlı ama doğru hareket et.",
+            "yanıt: Kırıkta yanlış müdahale durumu kötüleştirir.",
+            "yanıt: Bayılan kişiyi yan yatırmak solunumu kolaylaştırır.",
+            "yanıt: Boğulma durumunda acil yardım çağırmayı unutma.",
+            "yanıt: Göz yaralanmalarında göz kapalı tutulmalı.",
+            "yanıt: Zehirlenmede ambalajı saklamak önemlidir.",
+            "yanıt: Yanıkta bölgeyi temiz tutmak gerekir.",
+            "yanıt: Burkulmalarda ayağı yukarı kaldırmak faydalıdır.",
+            "yanıt: Kalp masajında göğüs kafesi 5-6 cm çökmeli.",
+            "yanıt: Şokta kişiyi battaniye ile örtmek gerekir.",
+            "yanıt: Kanama durmazsa turnike uygulanabilir.",
+            "yanıt: Burun kanamasında baş öne eğilmeli.",
+            "yanıt: Elektrik çarpmasında kişiyi tahta ile ayır.",
+            "yanıt: İlk yardımda hızlı ama doğru hareket et."
+            "yanıt: Kırıkta yanlış müdahale durumu kötüleştirir.",
+            "yanıt: Bayılan kişiyi yan yatırmak solunumu kolaylaştırır.",
+            "yanıt: Boğulma durumunda acil yardım çağırmayı unutma.",
+            "yanıt: Göz yaralanmalarında göz kapalı tutulmalı.",
+            "yanıt: Zehirlenmede ambalajı saklamak önemlidir.",
+            "yanıt: Yanıkta bölgeyi temiz tutmak gerekir.",
+            "yanıt: Burkulmalarda ayağı yukarı kaldırmak faydalıdır.",
+            "yanıt: Kalp masajında göğüs kafesi 5-6 cm çökmeli.",
+            "yanıt: Şokta kişiyi battaniye ile örtmek gerekir.",
+            "yanıt: Kanama durmazsa turnike uygulanabilir.",
+            "yanıt: Burun kanamasında baş öne eğilmeli.",
+            "yanıt: Elektrik çarpmasında kişiyi tahta ile ayır.",
+            "yanıt: İlk yardımda hızlı ama doğru hareket et.",
+            "yanıt: Kırıkta yanlış müdahale durumu kötüleştirir.",
+            "yanıt: Bayılan kişiyi yan yatırmak solunumu kolaylaştırır.",
+            "yanıt: Boğulma durumunda acil yardım çağırmayı unutma.",
+            "yanıt: Göz yaralanmalarında göz kapalı tutulmalı.",
+            "yanıt: Zehirlenmede ambalajı saklamak önemlidir.",
+            "yanıt: Yanıkta bölgeyi temiz tutmak gerekir.",
+            "yanıt: Burkulmalarda ayağı yukarı kaldırmak faydalıdır.",
+            "yanıt: Kalp masajında göğüs kafesi 5-6 cm çökmeli.",
+            "yanıt: Şokta kişiyi battaniye ile örtmek gerekir.",
+            "yanıt: Kanama durmazsa turnike uygulanabilir.",
+            "yanıt: Burun kanamasında baş öne eğilmeli.",
+            "yanıt: Elektrik çarpmasında kişiyi tahta ile ayır."
+
+        ]
+
+    def send_message(self):
+        user_text = self.input_area.toPlainText().strip()
+        if not user_text:
+            return
+
+        self.chat_area.append(f"Kullanıcı: {user_text}")
+        self.input_area.clear()
+
+        ai_response = random.choice(self.responses)
+        self.chat_area.append(f"Rümeysa: {ai_response}\n\n(Output ~{self.max_output_tokens} tokens, Params={self.params})")
+
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QPushButton
+import random
+
+class RuveydaAI(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Rüveyda - Kodlama Uzmanı")
+        self.resize(500, 400)
+
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        self.chat_area = QTextEdit()
+        self.chat_area.setReadOnly(True)
+        layout.addWidget(self.chat_area)
+
+        self.input_area = QTextEdit()
+        self.input_area.setFixedHeight(60)
+        layout.addWidget(self.input_area)
+
+        send_btn = QPushButton("Gönder")
+        send_btn.clicked.connect(self.send_message)
+        layout.addWidget(send_btn)
+
+        # Model özellikleri
+        self.params = 16384
+        self.max_output_tokens = 1000
+
+        # Örnek yanıtlar (100 olacak, burada ilk 10’u gösteriyorum)
+        self.responses = [
+            "yanıt: Bu kodu Python’da şöyle yazabilirsin: print('Merhaba Dünya').",
+            "yanıt: Hata mesajını paylaş, debug edelim.",
+            "yanıt: Bence burada bir fonksiyon tanımlamak mantıklı olur.",
+            "yanıt: Döngü kullanarak tekrar eden işlemleri kolaylaştırabilirsin.",
+            "yanıt: Kodunu modüllere ayırmak okunabilirliği artırır.",
+            "yanıt: Try/Except blokları hata yönetimi için idealdir.",
+            "yanıt: List comprehension Python’da çok güçlüdür.",
+            "yanıt: C dilinde printf ile ekrana yazdırabilirsin.",
+            "yanıt: JavaScript’te console.log kullanabilirsin.",
+            "yanıt: Algoritmanı önce kağıtta tasarlamak işini kolaylaştırır.",
+            "yanıt: Bu kodu Python’da şöyle yazabilirsin: print('Merhaba Dünya').",
+            "yanıt: Hata mesajını paylaş, debug edelim.",
+            "yanıt: Bence burada bir fonksiyon tanımlamak mantıklı olur.",
+            "yanıt: Döngü kullanarak tekrar eden işlemleri kolaylaştırabilirsin.",
+            "yanıt: Kodunu modüllere ayırmak okunabilirliği artırır.",
+            "yanıt: Try/Except blokları hata yönetimi için idealdir.",
+            "yanıt: List comprehension Python’da çok güçlüdür.",
+            "yanıt: C dilinde printf ile ekrana yazdırabilirsin.",
+            "yanıt: JavaScript’te console.log kullanabilirsin.",
+            "yanıt: Algoritmanı önce kağıtta tasarlamak işini kolaylaştırır.",
+            "yanıt: Kodunuzu yorum satırlarıyla açıklayın.",
+            "yanıt: Fonksiyonlar tekrar kullanılabilirliği sağlar.",
+            "yanıt: Class yapısı nesne yönelimli programlama için uygundur.",
+            "yanıt: Debugger kullanmak hataları hızlı bulmanı sağlar.",
+            "yanıt: Kodunuzu test etmek için unit test yazın.",
+            "yanıt: Git versiyon kontrolü için en iyi araçtır.",
+            "yanıt: Kodunuzu optimize etmek için algoritma karmaşıklığını kontrol edin.",
+            "yanıt: Döngülerde break ve continue kullanabilirsin.",
+            "yanıt: Python’da dictionary veri yapısı çok kullanışlıdır.",
+            "yanıt: Kodunuzu refactor etmek uzun vadede faydalıdır.",
+            "yanıt: Algoritma mantığını anlamak kodlamayı kolaylaştırır.",
+            "yanıt: Kodunuzu paylaşırken README dosyası ekleyin.",
+            "yanıt: API entegrasyonu için requests modülünü kullanabilirsin.",
+            "yanıt: Kodunuzu düzenli tutmak için PEP8 kurallarına uyun.",
+            "yanıt: Hata ayıklarken print ile değişkenleri kontrol edin."
+            "yanıt: Kodunuzu fonksiyonlara bölmek karmaşıklığı azaltır.",
+            "yanıt: Python’da lambda fonksiyonları kısa işlemler için idealdir.",
+            "yanıt: C++’ta cout << ile ekrana yazdırabilirsin.",
+            "yanıt: Java’da System.out.println kullanabilirsin.",
+            "yanıt: Kodunuzu düzenli tutmak için değişken isimlerini anlamlı seçin.",
+            "yanıt: Döngüleri optimize etmek performansı artırır.",
+            "yanıt: Kodunuzu test etmek için pytest kullanabilirsin.",
+            "yanıt: SQL sorgularında WHERE koşulu filtreleme sağlar.",
+            "yanıt: Kodunuzu modüler hale getirmek bakım kolaylığı sağlar.",
+            "yanıt: Algoritma karmaşıklığını O(n) ile ifade edebilirsin.",
+            "yanıt: Kodunuzu paylaşırken lisans eklemeyi unutma.",
+            "yanıt: API anahtarlarını gizli tutmak güvenlik için önemlidir.",
+            "yanıt: Kodunuzu düzenli tutmak için klasör yapısı oluşturun.",
+            "yanıt: Döngülerde enumerate kullanmak indeksleri kolaylaştırır.",
+            "yanıt: Kodunuzu optimize etmek için cache kullanabilirsin.",
+            "yanıt: Python’da set veri yapısı benzersiz elemanlar için uygundur.",
+            "yanıt: Kodunuzu refactor etmek okunabilirliği artırır.",
+            "yanıt: Algoritma mantığını anlamak problem çözmeyi kolaylaştırır.",
+            "yanıt: Kodunuzu paylaşırken örnek kullanım ekleyin.",
+            "yanıt: API entegrasyonu için JSON formatı kullanılır.",
+            "yanıt: Kodunuzu düzenli tutmak için indentation önemlidir.",
+            "yanıt: Hata ayıklarken logging modülünü kullanabilirsin.",
+            "yanıt: Kodunuzu fonksiyonlara bölmek tekrar kullanılabilirliği sağlar.",
+            "yanıt: Python’da generator fonksiyonları bellek dostudur.",
+            "yanıt: Kodunuzu optimize etmek için algoritma seçimini doğru yapın."
+            "yanıt: Kodunuzu düzenli tutmak için değişkenleri anlamlı adlandırın.",
+            "yanıt: Döngülerde range kullanmak sayıları kolaylaştırır.",
+            "yanıt: Kodunuzu test etmek için unittest kullanabilirsin.",
+            "yanıt: SQL sorgularında JOIN tabloları birleştirir.",
+            "yanıt: Kodunuzu modüler hale getirmek bakım kolaylığı sağlar.",
+            "yanıt: Algoritma karmaşıklığını O(log n) ile ifade edebilirsin.",
+            "yanıt: Kodunuzu paylaşırken dokümantasyon ekleyin.",
+            "yanıt: API anahtarlarını çevre değişkenlerinde saklayın.",
+            "yanıt: Kodunuzu düzenli tutmak için dosya yapısını planlayın.",
+            "yanıt: Döngülerde zip kullanmak listeleri eşleştirir.",
+            "yanıt: Kodunuzu optimize etmek için memoization kullanabilirsin.",
+            "yanıt: Python’da tuple veri yapısı sabit elemanlar için uygundur.",
+            "yanıt: Kodunuzu refactor etmek uzun vadede faydalıdır.",
+            "yanıt: Algoritma mantığını anlamak kodlamayı kolaylaştırır.",
+            "yanıt: Kodunuzu paylaşırken örnek kod ekleyin.",
+            "yanıt: API entegrasyonu için XML formatı da kullanılabilir.",
+            "yanıt: Kodunuzu düzenli tutmak için yorum satırları ekleyin.",
+            "yanıt: Hata ayıklarken assert kullanabilirsin.",
+            "yanıt: Kodunuzu fonksiyonlara bölmek karmaşıklığı azaltır.",
+            "yanıt: Python’da itertools modülü güçlüdür.",
+            "yanıt: Kodunuzu optimize etmek için doğru veri yapısını seçin.",
+            "yanıt: Kodunuzu düzenli tutmak için standartlara uyun.",
+            "yanıt: Döngülerde while kullanmak koşullu tekrar sağlar.",
+            "yanıt: Kodunuzu test etmek için coverage raporu alın.",
+            "yanıt: SQL sorgularında GROUP BY gruplama yapar."
+            "yanıt: Kodunuzu modüler hale getirmek bakım kolaylığı sağlar.",
+            "yanıt: Algoritma karmaşıklığını O(n^2) ile ifade edebilirsin.",
+            "yanıt: Kodunuzu paylaşırken örnek çıktılar ekleyin.",
+            "yanıt: API anahtarlarını güvenli dosyalarda saklayın.",
+            "yanıt: Kodunuzu düzenli tutmak için klasör yapısı oluşturun.",
+            "yanıt: Döngülerde break kullanmak döngüyü sonlandırır.",
+            "yanıt: Kodunuzu optimize etmek için threading kullanabilirsin.",
+            "yanıt: Python’da list veri yapısı çok esnektir.",
+            "yanıt: Kodunuzu refactor etmek okunabilirliği artırır.",
+            "yanıt: Algoritma mantığını anlamak problem çözmeyi kolaylaştırır.",
+            "yanıt: Kodunuzu paylaşırken kullanım senaryosu ekleyin.",
+            "yanıt: API entegrasyonu için RESTful servisler kullanılır.",
+            "yanıt: Kodunuzu düzenli tutmak için indentation önemlidir.",
+            "yanıt: Hata ayıklarken debugger kullanabilirsin.",
+            "yanıt: Kodunuzu fonksiyonlara bölmek tekrar kullanılabilirliği sağlar.",
+            "yanıt: Python’da dict veri yapısı anahtar-değer ilişkisi için uygundur.",
+            "yanıt: Kodunuzu optimize etmek için multiprocessing kullanabilirsin.",
+            "yanıt: Kodunuzu düzenli tutmak için PEP8 kurallarına uyun.",
+            "yanıt: Döngülerde continue kullanmak sonraki adıma geçer.",
+            "yanıt: Kodunuzu test etmek için mock kullanabilirsin.",
+            "yanıt: SQL sorgularında ORDER BY sıralama yapar.",
+            "yanıt: Kodunuzu modüler hale getirmek bakım kolaylığı sağlar.",
+            "yanıt: Algoritma karmaşıklığını O(1) ile ifade edebilirsin.",
+            "yanıt: Kodunuzu paylaşırken örnek veri ekleyin.",
+            "yanıt: API anahtarlarını gizli tutmak güvenlik için önemlidir."
+        ]
+
+    def send_message(self):
+        user_text = self.input_area.toPlainText().strip()
+        if not user_text:
+            return
+
+        self.chat_area.append(f"Kullanıcı: {user_text}")
+        self.input_area.clear()
+
+        ai_response = random.choice(self.responses)
+        self.chat_area.append(f"Rüveyda: {ai_response}\n\n(Output ~{self.max_output_tokens} tokens, Params={self.params})")
+
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QPushButton
+import random
+
+class SudeAI(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Sude - Kozmetik & Güzellik Uzmanı")
+        self.resize(500, 400)
+
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        self.chat_area = QTextEdit()
+        self.chat_area.setReadOnly(True)
+        layout.addWidget(self.chat_area)
+
+        self.input_area = QTextEdit()
+        self.input_area.setFixedHeight(60)
+        layout.addWidget(self.input_area)
+
+        send_btn = QPushButton("Gönder")
+        send_btn.clicked.connect(self.send_message)
+        layout.addWidget(send_btn)
+
+        # Model özellikleri
+        self.params = 16384
+        self.max_output_tokens = 1000
+
+        # Örnek yanıtlar (100 olacak, burada ilk 10’u gösteriyorum)
+        self.responses = [
+            "yanıt: Cildini her gün temizlemek sağlıklı görünüm için önemlidir.",
+            "yanıt: Nemlendirici kullanmak cilt bariyerini korur.",
+            "yanıt: Güneş kremi günlük bakımın en kritik adımıdır.",
+            "yanıt: Doğal maskeler cildini besler.",
+            "yanıt: Makyaj öncesi baz kullanmak kalıcılığı artırır.",
+            "yanıt: Dudak balmı dudaklarını nemli tutar.",
+            "yanıt: Saç uçlarına yağ sürmek kırıkları azaltır.",
+            "yanıt: Parfümü bilek ve boyuna sıkmak kalıcılığı artırır.",
+            "yanıt: Gece kremi cildin yenilenmesine yardımcı olur.",
+            "yanıt: Kaşlarını doğal şekline uygun aldırmak yüzünü dengeler."
+            "yanıt: Cildini her gün temizlemek sağlıklı görünüm için önemlidir.",
+            "yanıt: Nemlendirici kullanmak cilt bariyerini korur.",
+            "yanıt: Güneş kremi günlük bakımın en kritik adımıdır.",
+            "yanıt: Doğal maskeler cildini besler.",
+            "yanıt: Makyaj öncesi baz kullanmak kalıcılığı artırır.",
+            "yanıt: Dudak balmı dudaklarını nemli tutar.",
+            "yanıt: Saç uçlarına yağ sürmek kırıkları azaltır.",
+            "yanıt: Parfümü bilek ve boyuna sıkmak kalıcılığı artırır.",
+            "yanıt: Gece kremi cildin yenilenmesine yardımcı olur.",
+            "yanıt: Kaşlarını doğal şekline uygun aldırmak yüzünü dengeler.",
+            "yanıt: Cilt tipine uygun ürün seçmek çok önemlidir.",
+            "yanıt: Haftada bir peeling yapmak ölü deriyi temizler.",
+            "yanıt: Göz kremi kullanmak ince çizgileri azaltır.",
+            "yanıt: Saç maskesi saçlarını güçlendirir.",
+            "yanıt: Doğal yağlar saç bakımında etkilidir.",
+            "yanıt: Parfümü kıyafete değil cilde sıkmalısın.",
+            "yanıt: Makyaj fırçalarını düzenli temizlemek hijyen sağlar.",
+            "yanıt: Cilt bakımında düzenli rutin çok önemlidir.",
+            "yanıt: Dudak peelingi dudaklarını pürüzsüz yapar.",
+            "yanıt: Saçlarını ısıya karşı koruyucu ile şekillendir.",
+            "yanıt: Güneş kremi kışın da kullanılmalıdır.",
+            "yanıt: Cilt bakımında su içmek en doğal yöntemdir.",
+            "yanıt: Kaşlarını aşırı inceltmekten kaçın.",
+            "yanıt: Makyajı uyumadan önce mutlaka temizle.",
+            "yanıt: Cilt tipine uygun maske kullan."
+            "yanıt: Nemlendirici kremi sabah ve akşam uygula.",
+            "yanıt: Göz altı morlukları için soğuk kompres yapabilirsin.",
+            "yanıt: Saçlarını çok sık yıkamak kuruluğa sebep olur.",
+            "yanıt: Doğal sabunlar cilt için daha naziktir.",
+            "yanıt: Makyajda ten rengine uygun fondöten seç.",
+            "yanıt: Dudak kalemi kullanmak dudak şeklini belirginleştirir.",
+            "yanıt: Saçlarını tararken uçlardan başla.",
+            "yanıt: Parfümü saçına sıkma, alkol zarar verebilir.",
+            "yanıt: Gece bakımında retinol etkili olabilir.",
+            "yanıt: Kaşlarını doğal bırakmak yüzünü genç gösterir.",
+            "yanıt: Cilt tipine uygun serum kullan.",
+            "yanıt: Haftada bir saç maskesi uygula.",
+            "yanıt: Göz çevresini nazikçe temizle.",
+            "yanıt: Doğal yağlar cilt bakımında faydalıdır.",
+            "yanıt: Parfümü nabız noktalarına uygula.",
+            "yanıt: Makyaj süngerini düzenli yıka.",
+            "yanıt: Cilt bakımında sabır çok önemlidir.",
+            "yanıt: Dudaklarını nemli tutmak çatlamayı önler.",
+            "yanıt: Saçlarını ısıya karşı koru.",
+            "yanıt: Güneş kremi UVA ve UVB korumalı olmalı.",
+            "yanıt: Cilt bakımında dengeli beslenme önemlidir.",
+            "yanıt: Kaşlarını doğal şekline uygun aldır.",
+            "yanıt: Makyajı temizlemeden uyuma.",
+            "yanıt: Cilt tipine uygun peeling seç.",
+            "yanıt: Nemlendirici kremi düzenli kullan."
+            "yanıt: Göz altı torbaları için yeşil çay kompresi yapabilirsin.",
+            "yanıt: Saçlarını çok sık boyama, yıpranır.",
+            "yanıt: Doğal maskeler cildini besler.",
+            "yanıt: Makyajda doğru ışık çok önemlidir.",
+            "yanıt: Dudak balmı kışın daha sık kullanılmalı.",
+            "yanıt: Saç uçlarına düzenli bakım yap.",
+            "yanıt: Parfümü sabah uygula, gün boyu kalır.",
+            "yanıt: Gece kremi cildin yenilenmesine yardımcı olur.",
+            "yanıt: Kaşlarını doğal bırakmak yüzünü dengeler.",
+            "yanıt: Cilt tipine uygun ürün seç.",
+            "yanıt: Haftada bir peeling yap.",
+            "yanıt: Göz kremi kullanmak çizgileri azaltır.",
+            "yanıt: Saç maskesi saçlarını güçlendirir.",
+            "yanıt: Doğal yağlar saç bakımında etkilidir.",
+            "yanıt: Parfümü cilde uygula.",
+            "yanıt: Makyaj fırçalarını temizle.",
+            "yanıt: Cilt bakımında düzenli rutin önemlidir.",
+            "yanıt: Dudak peelingi uygula.",
+            "yanıt: Saçlarını ısıya karşı koru.",
+            "yanıt: Güneş kremi her mevsimde gerekli.",
+            "yanıt: Su içmek cilt için faydalıdır.",
+            "yanıt: Kaşlarını aşırı inceltme.",
+            "yanıt: Makyajı temizlemeden uyuma.",
+            "yanıt: Cilt tipine uygun maske kullan.",
+            "yanıt: Nemlendirici kremi sabah uygula."
+            "yanıt: Göz altı morlukları için salatalık dilimleri kullanabilirsin.",
+            "yanıt: Saçlarını çok sık düzleştirme.",
+            "yanıt: Doğal sabunlar cilt için naziktir.",
+            "yanıt: Makyajda doğru ürün seçmek önemlidir.",
+            "yanıt: Dudak kalemi dudak şeklini belirginleştirir.",
+            "yanıt: Saçlarını tararken uçlardan başla.",
+            "yanıt: Parfümü kıyafete değil cilde uygula.",
+            "yanıt: Gece bakımında retinol etkili olabilir.",
+            "yanıt: Kaşlarını doğal bırakmak yüzünü genç gösterir.",
+            "yanıt: Cilt tipine uygun serum kullan.",
+            "yanıt: Haftada bir saç maskesi uygula.",
+            "yanıt: Göz çevresini nazikçe temizle.",
+            "yanıt: Doğal yağlar cilt bakımında faydalıdır.",
+            "yanıt: Parfümü nabız noktalarına uygula.",
+            "yanıt: Makyaj süngerini düzenli yıka.",
+            "yanıt: Cilt bakımında sabır çok önemlidir.",
+            "yanıt: Dudaklarını nemli tutmak çatlamayı önler.",
+            "yanıt: Saçlarını ısıya karşı koru.",
+            "yanıt: Güneş kremi UVA ve UVB korumalı olmalı.",
+            "yanıt: Cilt bakımında dengeli beslenme önemlidir.",
+            "yanıt: Kaşlarını doğal şekline uygun aldır.",
+            "yanıt: Makyajı temizlemeden uyuma.",
+            "yanıt: Cilt tipine uygun peeling seç.",
+            "yanıt: Nemlendirici kremi düzenli kullan.",
+            "yanıt: Göz altı torbaları için soğuk kompres uygula."
+
+        ]
+
+    def send_message(self):
+        user_text = self.input_area.toPlainText().strip()
+        if not user_text:
+            return
+
+        self.chat_area.append(f"Kullanıcı: {user_text}")
+        self.input_area.clear()
+
+        ai_response = random.choice(self.responses)
+        self.chat_area.append(f"Sude: {ai_response}\n\n(Output ~{self.max_output_tokens} tokens, Params={self.params})")
+
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QPushButton
+import random
+
+class SibelAI(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Sibel - Müzik & Sanat Uzmanı")
+        self.resize(500, 400)
+
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        self.chat_area = QTextEdit()
+        self.chat_area.setReadOnly(True)
+        layout.addWidget(self.chat_area)
+
+        self.input_area = QTextEdit()
+        self.input_area.setFixedHeight(60)
+        layout.addWidget(self.input_area)
+
+        send_btn = QPushButton("Gönder")
+        send_btn.clicked.connect(self.send_message)
+        layout.addWidget(send_btn)
+
+        # Model özellikleri
+        self.params = 16384
+        self.max_output_tokens = 1000
+
+        # Örnek yanıtlar (100 olacak, burada ilk 10’u gösteriyorum)
+        self.responses = [
+            "yanıt: Gitar çalarken parmak egzersizleri yapmayı unutma.",
+            "yanıt: Piyanoda gam çalışmak teknik gelişim sağlar.",
+            "yanıt: Şarkı yazarken önce melodiye odaklan.",
+            "yanıt: Resim yaparken ışık-gölge dengesi çok önemlidir.",
+            "yanıt: Keman çalarken yay kontrolü kritik bir beceridir.",
+            "yanıt: Sanat tarihi öğrenmek yaratıcılığı besler.",
+            "yanıt: Şarkı söylerken diyafram nefesi kullan.",
+            "yanıt: Yağlı boya tabloda katmanlı çalışmak derinlik verir.",
+            "yanıt: Müzikte ritim duygusu her şeyin temelidir.",
+            "yanıt: Çizim yaparken perspektif kurallarına dikkat et."
+            "yanıt: Gitar çalarken parmak egzersizleri yapmayı unutma.",
+            "yanıt: Piyanoda gam çalışmak teknik gelişim sağlar.",
+            "yanıt: Şarkı yazarken önce melodiye odaklan.",
+            "yanıt: Resim yaparken ışık-gölge dengesi çok önemlidir.",
+            "yanıt: Keman çalarken yay kontrolü kritik bir beceridir.",
+            "yanıt: Sanat tarihi öğrenmek yaratıcılığı besler.",
+            "yanıt: Şarkı söylerken diyafram nefesi kullan.",
+            "yanıt: Yağlı boya tabloda katmanlı çalışmak derinlik verir.",
+            "yanıt: Müzikte ritim duygusu her şeyin temelidir.",
+            "yanıt: Çizim yaparken perspektif kurallarına dikkat et.",
+            "yanıt: Nota okumayı öğrenmek müzisyenliği geliştirir.",
+            "yanıt: Renk teorisi resimde çok önemlidir.",
+            "yanıt: Şarkı söylerken sesini ısıtmayı unutma.",
+            "yanıt: Heykel yaparken malzeme seçimi önemlidir.",
+            "yanıt: Müzikte doğaçlama yaratıcılığı artırır.",
+            "yanıt: Çizim yaparken oran-orantıya dikkat et.",
+            "yanıt: Şarkı yazarken sözleri duygularla bağdaştır.",
+            "yanıt: Piyanoda iki el koordinasyonu çalış.",
+            "yanıt: Resimde kompozisyon düzeni önemlidir.",
+            "yanıt: Keman çalarken parmak pozisyonlarını doğru ayarla.",
+            "yanıt: Sanat akımlarını öğrenmek bakış açını genişletir.",
+            "yanıt: Şarkı söylerken nefes kontrolü yap.",
+            "yanıt: Yağlı boya tabloda fırça darbeleri önemlidir.",
+            "yanıt: Müzikte tempo tutmak grup uyumunu sağlar.",
+            "yanıt: Çizimde gölgelendirme derinlik katar."
+            "yanıt: Nota bilgisi müzikte temel taştır.",
+            "yanıt: Renk uyumu resimde göz alıcılığı artırır.",
+            "yanıt: Şarkı söylerken ses aralığını bilmek önemlidir.",
+            "yanıt: Heykelde detay işçilik sanatın değerini artırır.",
+            "yanıt: Müzikte armoni kulağı geliştirmek için çalış.",
+            "yanıt: Çizimde perspektif derinlik sağlar.",
+            "yanıt: Şarkı yazarken ritim duygusunu koru.",
+            "yanıt: Piyanoda parmak egzersizleri yap.",
+            "yanıt: Resimde fırça seçimi önemlidir.",
+            "yanıt: Keman çalarken yay hareketini kontrol et.",
+            "yanıt: Sanat tarihi bilmek eserleri anlamanı sağlar.",
+            "yanıt: Şarkı söylerken sesini doğru kullan.",
+            "yanıt: Yağlı boya tabloda renk geçişleri önemlidir.",
+            "yanıt: Müzikte metronom kullanmak ritmi geliştirir.",
+            "yanıt: Çizimde detaylar eseri zenginleştirir.",
+            "yanıt: Nota okumak müzikte ilerlemeyi sağlar.",
+            "yanıt: Renk kontrastı resimde etki yaratır.",
+            "yanıt: Şarkı söylerken sesini zorlamamaya dikkat et.",
+            "yanıt: Heykelde malzeme dayanıklılığı önemlidir.",
+            "yanıt: Müzikte doğaçlama özgünlük katar.",
+            "yanıt: Çizimde oran-orantı doğru olmalı.",
+            "yanıt: Şarkı yazarken duygularını aktar.",
+            "yanıt: Piyanoda gam çalışmak parmak hızını artırır.",
+            "yanıt: Resimde ışık kullanımı önemlidir.",
+            "yanıt: Keman çalarken parmak pozisyonlarını çalış."
+            "yanıt: Sanat akımlarını öğrenmek yaratıcılığı artırır.",
+            "yanıt: Şarkı söylerken nefes kontrolü yap.",
+            "yanıt: Yağlı boya tabloda katmanlı çalışmak derinlik verir.",
+            "yanıt: Müzikte tempo tutmak grup uyumunu sağlar.",
+            "yanıt: Çizimde gölgelendirme derinlik katar.",
+            "yanıt: Nota bilgisi müzikte temel taştır.",
+            "yanıt: Renk uyumu resimde göz alıcılığı artırır.",
+            "yanıt: Şarkı söylerken ses aralığını bilmek önemlidir.",
+            "yanıt: Heykelde detay işçilik sanatın değerini artırır.",
+            "yanıt: Müzikte armoni kulağı geliştirmek için çalış.",
+            "yanıt: Çizimde perspektif derinlik sağlar.",
+            "yanıt: Şarkı yazarken ritim duygusunu koru.",
+            "yanıt: Piyanoda parmak egzersizleri yap.",
+            "yanıt: Resimde fırça seçimi önemlidir.",
+            "yanıt: Keman çalarken yay hareketini kontrol et.",
+            "yanıt: Sanat tarihi bilmek eserleri anlamanı sağlar.",
+            "yanıt: Şarkı söylerken sesini doğru kullan.",
+            "yanıt: Yağlı boya tabloda renk geçişleri önemlidir.",
+            "yanıt: Müzikte metronom kullanmak ritmi geliştirir.",
+            "yanıt: Çizimde detaylar eseri zenginleştirir.",
+            "yanıt: Nota okumak müzikte ilerlemeyi sağlar.",
+            "yanıt: Renk kontrastı resimde etki yaratır.",
+            "yanıt: Şarkı söylerken sesini zorlamamaya dikkat et.",
+            "yanıt: Heykelde malzeme dayanıklılığı önemlidir.",
+            "yanıt: Müzikte doğaçlama özgünlük katar."
+            "yanıt: Çizimde oran-orantı doğru olmalı.",
+            "yanıt: Şarkı yazarken duygularını aktar.",
+            "yanıt: Piyanoda gam çalışmak parmak hızını artırır.",
+            "yanıt: Resimde ışık kullanımı önemlidir.",
+            "yanıt: Keman çalarken parmak pozisyonlarını çalış.",
+            "yanıt: Sanat akımlarını öğrenmek yaratıcılığı artırır.",
+            "yanıt: Şarkı söylerken nefes kontrolü yap.",
+            "yanıt: Yağlı boya tabloda katmanlı çalışmak derinlik verir.",
+            "yanıt: Müzikte tempo tutmak grup uyumunu sağlar.",
+            "yanıt: Çizimde gölgelendirme derinlik katar.",
+            "yanıt: Nota bilgisi müzikte temel taştır.",
+            "yanıt: Renk uyumu resimde göz alıcılığı artırır.",
+            "yanıt: Şarkı söylerken ses aralığını bilmek önemlidir.",
+            "yanıt: Heykelde detay işçilik sanatın değerini artırır.",
+            "yanıt: Müzikte armoni kulağı geliştirmek için çalış.",
+            "yanıt: Çizimde perspektif derinlik sağlar.",
+            "yanıt: Şarkı yazarken ritim duygusunu koru.",
+            "yanıt: Piyanoda parmak egzersizleri yap.",
+            "yanıt: Resimde fırça seçimi önemlidir.",
+            "yanıt: Keman çalarken yay hareketini kontrol et.",
+            "yanıt: Sanat tarihi bilmek eserleri anlamanı sağlar.",
+            "yanıt: Şarkı söylerken sesini doğru kullan.",
+            "yanıt: Yağlı boya tabloda renk geçişleri önemlidir.",
+            "yanıt: Müzikte metronom kullanmak ritmi geliştirir.",
+            "yanıt: Çizimde detaylar eseri zenginleştirir."
+
+        ]
+
+    def send_message(self):
+        user_text = self.input_area.toPlainText().strip()
+        if not user_text:
+            return
+
+        self.chat_area.append(f"Kullanıcı: {user_text}")
+        self.input_area.clear()
+
+        ai_response = random.choice(self.responses)
+        self.chat_area.append(f"Sibel: {ai_response}\n\n(Output ~{self.max_output_tokens} tokens, Params={self.params})")
+
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QPushButton
+import random
+
+class HasanAI(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Hasan - Hayvan Bakım Uzmanı")
+        self.resize(500, 400)
+
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        self.chat_area = QTextEdit()
+        self.chat_area.setReadOnly(True)
+        layout.addWidget(self.chat_area)
+
+        self.input_area = QTextEdit()
+        self.input_area.setFixedHeight(60)
+        layout.addWidget(self.input_area)
+
+        send_btn = QPushButton("Gönder")
+        send_btn.clicked.connect(self.send_message)
+        layout.addWidget(send_btn)
+
+        # Model özellikleri
+        self.params = 16384
+        self.max_output_tokens = 1000
+
+        # Örnek yanıtlar (100 olacak, burada ilk 10’u gösteriyorum)
+        self.responses = [
+            "yanıt: Kedilerin tüylerini düzenli taramak dökülmeyi azaltır.",
+            "yanıt: Köpekler için günlük yürüyüş şarttır.",
+            "yanıt: Balıkların suyunu haftada bir değiştirmek gerekir.",
+            "yanıt: Kuşların kafesini temiz tutmak sağlık için önemlidir.",
+            "yanıt: Kedilere süt vermek doğru değildir, su ver.",
+            "yanıt: Köpeklerde aşı takvimine uymak çok önemlidir.",
+            "yanıt: Balık yemini fazla vermek suyu kirletir.",
+            "yanıt: Kuşlara doğal dal parçaları koymak onları mutlu eder.",
+            "yanıt: Kediler için tırmalama tahtası ev eşyalarını korur.",
+            "yanıt: Köpeklerde tırnak kesimi düzenli yapılmalıdır."
+            "yanıt: Kedilerin tüylerini düzenli taramak dökülmeyi azaltır.",
+            "yanıt: Köpekler için günlük yürüyüş şarttır.",
+            "yanıt: Balıkların suyunu haftada bir değiştirmek gerekir.",
+            "yanıt: Kuşların kafesini temiz tutmak sağlık için önemlidir.",
+            "yanıt: Kedilere süt vermek doğru değildir, su ver.",
+            "yanıt: Köpeklerde aşı takvimine uymak çok önemlidir.",
+            "yanıt: Balık yemini fazla vermek suyu kirletir.",
+            "yanıt: Kuşlara doğal dal parçaları koymak onları mutlu eder.",
+            "yanıt: Kediler için tırmalama tahtası ev eşyalarını korur.",
+            "yanıt: Köpeklerde tırnak kesimi düzenli yapılmalıdır.",
+            "yanıt: Kedilerin kumunu her gün temizlemek gerekir.",
+            "yanıt: Köpeklerde kulak temizliği ihmal edilmemelidir.",
+            "yanıt: Balık akvaryumunda filtre kullanmak suyu temiz tutar.",
+            "yanıt: Kuşlara fazla ekmek vermek zararlıdır.",
+            "yanıt: Kediler için düzenli veteriner kontrolü şarttır.",
+            "yanıt: Köpeklerde diş temizliği sağlık için önemlidir.",
+            "yanıt: Balıkların suyunu klorsuz suyla değiştir.",
+            "yanıt: Kuşların kafesini güneş alan yere koyma.",
+            "yanıt: Kedilere çikolata vermek tehlikelidir.",
+            "yanıt: Köpeklerde pire kontrolü düzenli yapılmalı.",
+            "yanıt: Balık yemini çeşitlendirmek faydalıdır.",
+            "yanıt: Kuşlara vitamin takviyesi verilebilir.",
+            "yanıt: Kedilerin tırnaklarını kesmek mobilyaları korur.",
+            "yanıt: Köpeklerde düzenli egzersiz kilo kontrolü sağlar.",
+            "yanıt: Balıkların suyunu çok sık değiştirme."
+            "yanıt: Kuşların kafesini haftada bir yıka.",
+            "yanıt: Kedilere kemik vermek zararlıdır.",
+            "yanıt: Köpeklerde mama seçimi yaşa göre yapılmalı.",
+            "yanıt: Balıkların suyunu oda sıcaklığında tut.",
+            "yanıt: Kuşlara temiz su vermek çok önemlidir.",
+            "yanıt: Kediler için düzenli oyun zamanı gerekir.",
+            "yanıt: Köpeklerde soslu yiyecekler zararlıdır.",
+            "yanıt: Balık akvaryumunu güneşten uzak tut.",
+            "yanıt: Kuşların tüylerini düzenli kontrol et.",
+            "yanıt: Kedilere soğan vermek zehirlidir.",
+            "yanıt: Köpeklerde aşırı şekerli yiyeceklerden kaçın.",
+            "yanıt: Balıkların suyunu ani değiştirme.",
+            "yanıt: Kuşlara fazla tuz vermek zararlıdır.",
+            "yanıt: Kediler için mama kabını temiz tut.",
+            "yanıt: Köpeklerde düzenli su değişimi şarttır.",
+            "yanıt: Balıkların suyunu filtre ile temizle.",
+            "yanıt: Kuşların gagasını kontrol et.",
+            "yanıt: Kedilere alkol vermek ölümcüldür.",
+            "yanıt: Köpeklerde düzenli veteriner kontrolü gerekir.",
+            "yanıt: Balıkların suyunu oksijenli tut.",
+            "yanıt: Kuşlara fazla yağlı yiyecek verme.",
+            "yanıt: Kediler için düzenli aşı şarttır.",
+            "yanıt: Köpeklerde mama kabını temiz tut.",
+            "yanıt: Balıkların suyunu düzenli kontrol et.",
+            "yanıt: Kuşlara doğal yem vermek faydalıdır."
+            "yanıt: Kedilere sarımsak vermek zararlıdır.",
+            "yanıt: Köpeklerde düzenli yürüyüş kasları güçlendirir.",
+            "yanıt: Balıkların suyunu fazla ısıtma.",
+            "yanıt: Kuşların kafesini havalandır.",
+            "yanıt: Kediler için düzenli su içmek önemlidir.",
+            "yanıt: Köpeklerde aşırı tuzlu yiyeceklerden kaçın.",
+            "yanıt: Balıkların suyunu temiz tutmak sağlık sağlar.",
+            "yanıt: Kuşlara fazla şeker vermek zararlıdır.",
+            "yanıt: Kediler için düzenli oyun stresi azaltır.",
+            "yanıt: Köpeklerde düzenli mama değişimi faydalıdır.",
+            "yanıt: Balıkların suyunu düzenli havalandır.",
+            "yanıt: Kuşların kafesini güneşten koru.",
+            "yanıt: Kedilere kahve vermek zararlıdır.",
+            "yanıt: Köpeklerde düzenli tüy bakımı gerekir.",
+            "yanıt: Balıkların suyunu düzenli ölç.",
+            "yanıt: Kuşlara fazla ekmek verme.",
+            "yanıt: Kediler için düzenli veteriner kontrolü şarttır.",
+            "yanıt: Köpeklerde düzenli diş bakımı gerekir.",
+            "yanıt: Balıkların suyunu temiz tutmak önemlidir.",
+            "yanıt: Kuşların kafesini düzenli temizle.",
+            "yanıt: Kedilere çiğ et vermek risklidir.",
+            "yanıt: Köpeklerde düzenli egzersiz şarttır.",
+            "yanıt: Balıkların suyunu düzenli değiştir.",
+            "yanıt: Kuşlara doğal yem ver.",
+            "yanıt: Kediler için düzenli mama seçimi önemlidir."
+            "yanıt: Köpeklerde düzenli su içmek önemlidir.",
+            "yanıt: Balıkların suyunu düzenli kontrol et.",
+            "yanıt: Kuşların kafesini düzenli havalandır.",
+            "yanıt: Kedilere süt vermek doğru değildir.",
+            "yanıt: Köpeklerde düzenli aşı takvimi şarttır.",
+            "yanıt: Balıkların suyunu düzenli temizle.",
+            "yanıt: Kuşlara fazla tuz vermek zararlıdır.",
+            "yanıt: Kediler için düzenli oyun zamanı gerekir.",
+            "yanıt: Köpeklerde düzenli mama seçimi önemlidir.",
+            "yanıt: Balıkların suyunu düzenli havalandır.",
+            "yanıt: Kuşların kafesini düzenli temizle.",
+            "yanıt: Kedilere çikolata vermek tehlikelidir.",
+            "yanıt: Köpeklerde düzenli veteriner kontrolü gerekir.",
+            "yanıt: Balıkların suyunu düzenli ölç.",
+            "yanıt: Kuşlara doğal yem vermek faydalıdır.",
+            "yanıt: Kediler için düzenli su içmek önemlidir.",
+            "yanıt: Köpeklerde düzenli tüy bakımı gerekir.",
+            "yanıt: Balıkların suyunu düzenli değiştir.",
+            "yanıt: Kuşların kafesini güneşten koru.",
+            "yanıt: Kedilere kahve vermek zararlıdır.",
+            "yanıt: Köpeklerde düzenli diş bakımı gerekir.",
+            "yanıt: Balıkların suyunu temiz tutmak sağlık sağlar.",
+            "yanıt: Kuşlara fazla şeker vermek zararlıdır.",
+            "yanıt: Kediler için düzenli veteriner kontrolü şarttır.",
+            "yanıt: Köpeklerde düzenli egzersiz şarttır."
+
+        ]
+
+    def send_message(self):
+        user_text = self.input_area.toPlainText().strip()
+        if not user_text:
+            return
+
+        self.chat_area.append(f"Kullanıcı: {user_text}")
+        self.input_area.clear()
+
+        ai_response = random.choice(self.responses)
+        self.chat_area.append(f"Hasan: {ai_response}\n\n(Output ~{self.max_output_tokens} tokens, Params={self.params})")
+
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QPushButton
+import random
+
+class SevvalAI(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Şevval - Fitness Trainer")
+        self.resize(500, 400)
+
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        self.chat_area = QTextEdit()
+        self.chat_area.setReadOnly(True)
+        layout.addWidget(self.chat_area)
+
+        self.input_area = QTextEdit()
+        self.input_area.setFixedHeight(60)
+        layout.addWidget(self.input_area)
+
+        send_btn = QPushButton("Gönder")
+        send_btn.clicked.connect(self.send_message)
+        layout.addWidget(send_btn)
+
+        # Model özellikleri
+        self.params = 16384
+        self.max_output_tokens = 1000
+
+        # Örnek yanıtlar (100 olacak, burada ilk 10’u gösteriyorum)
+        self.responses = [
+            "yanıt: Düzenli kardiyo kalp sağlığını güçlendirir.",
+            "yanıt: Ağırlık çalışırken doğru form çok önemlidir.",
+            "yanıt: Protein alımı kas gelişimi için şarttır.",
+            "yanıt: Esneme hareketleri sakatlanmayı önler.",
+            "yanıt: Su içmek performansı artırır.",
+            "yanıt: Düzenli uyku kasların toparlanmasını sağlar.",
+            "yanıt: Squat bacak kaslarını güçlendirir.",
+            "yanıt: Plank karın kaslarını çalıştırır.",
+            "yanıt: Koşu dayanıklılığı artırır.",
+            "yanıt: Dengeli beslenme fitness başarısının anahtarıdır."
+            "yanıt: Düzenli kardiyo kalp sağlığını güçlendirir.",
+            "yanıt: Ağırlık çalışırken doğru form çok önemlidir.",
+            "yanıt: Protein alımı kas gelişimi için şarttır.",
+            "yanıt: Esneme hareketleri sakatlanmayı önler.",
+            "yanıt: Su içmek performansı artırır.",
+            "yanıt: Düzenli uyku kasların toparlanmasını sağlar.",
+            "yanıt: Squat bacak kaslarını güçlendirir.",
+            "yanıt: Plank karın kaslarını çalıştırır.",
+            "yanıt: Koşu dayanıklılığı artırır.",
+            "yanıt: Dengeli beslenme fitness başarısının anahtarıdır.",
+            "yanıt: Kardiyo ve ağırlığı dengelemek önemlidir.",
+            "yanıt: Isınma hareketleri sakatlanmayı önler.",
+            "yanıt: Soğuma hareketleri kasları rahatlatır.",
+            "yanıt: Düzenli spor motivasyonu artırır.",
+            "yanıt: HIIT antrenmanları yağ yakımını hızlandırır.",
+            "yanıt: Yoga esnekliği artırır.",
+            "yanıt: Pilates core kaslarını güçlendirir.",
+            "yanıt: Deadlift sırt kaslarını çalıştırır.",
+            "yanıt: Bench press göğüs kaslarını geliştirir.",
+            "yanıt: Lunge bacak kaslarını güçlendirir.",
+            "yanıt: Kardiyo kalori yakımını artırır.",
+            "yanıt: Ağırlık çalışması metabolizmayı hızlandırır.",
+            "yanıt: Düzenli spor stresi azaltır.",
+            "yanıt: Spor öncesi hafif yemek tercih et.",
+            "yanıt: Spor sonrası protein almak toparlanmayı hızlandırır."
+            "yanıt: Düzenli spor bağışıklığı güçlendirir.",
+            "yanıt: Kardiyo kalp ritmini düzenler.",
+            "yanıt: Ağırlık çalışması kas kütlesini artırır.",
+            "yanıt: Esneme hareketleri kasları esnek tutar.",
+            "yanıt: Su içmek kas kramplarını önler.",
+            "yanıt: Düzenli uyku enerji sağlar.",
+            "yanıt: Squat kalça kaslarını şekillendirir.",
+            "yanıt: Plank core kaslarını güçlendirir.",
+            "yanıt: Koşu yağ yakımını hızlandırır.",
+            "yanıt: Dengeli beslenme sağlığı korur.",
+            "yanıt: Kardiyo ve ağırlık birlikte yapılmalı.",
+            "yanıt: Isınma kasları hazırlar.",
+            "yanıt: Soğuma kasları rahatlatır.",
+            "yanıt: Düzenli spor motivasyonu artırır.",
+            "yanıt: HIIT kısa sürede etkili olur.",
+            "yanıt: Yoga zihni sakinleştirir.",
+            "yanıt: Pilates duruşu düzeltir.",
+            "yanıt: Deadlift güç kazandırır.",
+            "yanıt: Bench press göğüs kaslarını büyütür.",
+            "yanıt: Lunge dengeyi geliştirir.",
+            "yanıt: Kardiyo kalori yakar.",
+            "yanıt: Ağırlık çalışması kasları güçlendirir.",
+            "yanıt: Düzenli spor mutluluk hormonu salgılar.",
+            "yanıt: Spor öncesi su iç.",
+            "yanıt: Spor sonrası protein shake iç."
+            "yanıt: Düzenli spor kilo kontrolünü sağlar.",
+            "yanıt: Kardiyo kalp sağlığını korur.",
+            "yanıt: Ağırlık çalışması kasları şekillendirir.",
+            "yanıt: Esneme hareketleri sakatlanmayı önler.",
+            "yanıt: Su içmek performansı artırır.",
+            "yanıt: Düzenli uyku kasları toparlar.",
+            "yanıt: Squat bacak kaslarını çalıştırır.",
+            "yanıt: Plank karın kaslarını güçlendirir.",
+            "yanıt: Koşu dayanıklılığı artırır.",
+            "yanıt: Dengeli beslenme spor başarısını artırır.",
+            "yanıt: Kardiyo ve ağırlık dengeli yapılmalı.",
+            "yanıt: Isınma kasları hazırlar.",
+            "yanıt: Soğuma kasları rahatlatır.",
+            "yanıt: Düzenli spor motivasyonu artırır.",
+            "yanıt: HIIT yağ yakımını hızlandırır.",
+            "yanıt: Yoga esnekliği artırır.",
+            "yanıt: Pilates core kaslarını güçlendirir.",
+            "yanıt: Deadlift sırt kaslarını çalıştırır.",
+            "yanıt: Bench press göğüs kaslarını geliştirir.",
+            "yanıt: Lunge bacak kaslarını güçlendirir.",
+            "yanıt: Kardiyo kalori yakımını artırır.",
+            "yanıt: Ağırlık çalışması metabolizmayı hızlandırır.",
+            "yanıt: Düzenli spor stresi azaltır.",
+            "yanıt: Spor öncesi hafif yemek ye.",
+            "yanıt: Spor sonrası protein almak toparlanmayı hızlandırır."
+            "yanıt: Düzenli spor bağışıklığı güçlendirir.",
+            "yanıt: Kardiyo kalp ritmini düzenler.",
+            "yanıt: Ağırlık çalışması kas kütlesini artırır.",
+            "yanıt: Esneme hareketleri kasları esnek tutar.",
+            "yanıt: Su içmek kas kramplarını önler.",
+            "yanıt: Düzenli uyku enerji sağlar.",
+            "yanıt: Squat kalça kaslarını şekillendirir.",
+            "yanıt: Plank core kaslarını güçlendirir.",
+            "yanıt: Koşu yağ yakımını hızlandırır.",
+            "yanıt: Dengeli beslenme sağlığı korur.",
+            "yanıt: Kardiyo ve ağırlık birlikte yapılmalı.",
+            "yanıt: Isınma kasları hazırlar.",
+            "yanıt: Soğuma kasları rahatlatır.",
+            "yanıt: Düzenli spor motivasyonu artırır.",
+            "yanıt: HIIT kısa sürede etkili olur.",
+            "yanıt: Yoga zihni sakinleştirir.",
+            "yanıt: Pilates duruşu düzeltir.",
+            "yanıt: Deadlift güç kazandırır.",
+            "yanıt: Bench press göğüs kaslarını büyütür.",
+            "yanıt: Lunge dengeyi geliştirir.",
+            "yanıt: Kardiyo kalori yakar.",
+            "yanıt: Ağırlık çalışması kasları güçlendirir.",
+            "yanıt: Düzenli spor mutluluk hormonu salgılar.",
+            "yanıt: Spor öncesi su iç.",
+            "yanıt: Spor sonrası protein shake iç."
+
+        ]
+
+    def send_message(self):
+        user_text = self.input_area.toPlainText().strip()
+        if not user_text:
+            return
+
+        self.chat_area.append(f"Kullanıcı: {user_text}")
+        self.input_area.clear()
+
+        ai_response = random.choice(self.responses)
+        self.chat_area.append(f"Şevval: {ai_response}\n\n(Output ~{self.max_output_tokens} tokens, Params={self.params})")
+
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QComboBox, QPushButton
+import sys
+
+# Burada senin AI class’ların import edilmiş olacak
+# örn: from ai_modules import SibelAI, HasanAI, SevvalAI, IlgınAI, RumeysaAI, RuveydaAI, SudeAI
+
+class AISelector(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("AI Seçici - Multi Rehber")
+        self.resize(400, 200)
+
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        self.combo = QComboBox()
+        self.combo.addItems([
+            "Sibel - Müzik & Sanat",
+            "Hasan - Hayvan Bakım",
+            "Şevval - Fitness",
+            "Ilgın - Psikoloji",
+            "Rumeysa - Tıp",
+            "Ruveyda - Kodlama",
+            "Sude - Kozmetik"
+        ])
+        layout.addWidget(self.combo)
+
+        open_btn = QPushButton("AI Aç")
+        open_btn.clicked.connect(self.open_ai)
+        layout.addWidget(open_btn)
+
+    def open_ai(self):
+        choice = self.combo.currentText()
+        if "Sibel" in choice:
+            self.ai_window = SibelAI()
+        elif "Hasan" in choice:
+            self.ai_window = HasanAI()
+        elif "Şevval" in choice:
+            self.ai_window = SevvalAI()
+        elif "Ilgın" in choice:
+            self.ai_window = IlgınAI()
+        elif "Rumeysa" in choice:
+            self.ai_window = RumeysaAI()
+        elif "Ruveyda" in choice:
+            self.ai_window = RuveydaAI()
+        elif "Sude" in choice:
+            self.ai_window = SudeAI()
+        self.ai_window.show()
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    selector = AISelector()
+    selector.show()
+    sys.exit(app.exec())
