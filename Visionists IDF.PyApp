@@ -1,0 +1,161 @@
+import sys, subprocess
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QPlainTextEdit, QVBoxLayout, QWidget,
+    QComboBox, QPushButton, QTextEdit, QLineEdit, QFileDialog
+)
+
+# Basit Debugger sınıfı
+class Debugger:
+    def __init__(self, lang):
+        self.lang = lang
+        self.breakpoints = []
+
+    def add_breakpoint(self, line):
+        self.breakpoints.append(line)
+
+    def run(self, code, output_widget):
+        if self.lang == "Python":
+            lines = code.split("\n")
+            for i, line in enumerate(lines, start=1):
+                if i in self.breakpoints:
+                    output_widget.append(f"[DEBUG] Breakpoint {i}: {line}")
+                try:
+                    exec(line, {})
+                except Exception as e:
+                    output_widget.append(f"[DEBUG] Hata satır {i}: {e}")
+        elif self.lang == "C":
+            with open("temp.c", "w") as f:
+                f.write(code)
+            try:
+                subprocess.run(["gcc", "temp.c", "-o", "temp_exec"], check=True)
+                result = subprocess.run(["./temp_exec"], capture_output=True, text=True)
+                output_widget.append("[DEBUG] C kodu çalıştı:\n" + result.stdout)
+            except Exception as e:
+                output_widget.append(f"[DEBUG] C hatası: {e}")
+
+class VisionistsIDE(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Visionists Studio IDE v0.3 - Python + C Edition + Debugger")
+        self.resize(1100, 700)
+
+        central = QWidget()
+        layout = QVBoxLayout()
+        central.setLayout(layout)
+        self.setCentralWidget(central)
+
+        # Dil seçici
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItems(["Python", "C"])
+        layout.addWidget(self.lang_combo)
+
+        # Kod editörü
+        self.editor = QPlainTextEdit()
+        self.editor.setPlaceholderText("Kodunuzu buraya yazın...")
+        layout.addWidget(self.editor)
+
+        # Çalıştır butonu
+        run_btn = QPushButton("Çalıştır")
+        run_btn.clicked.connect(self.run_code)
+        layout.addWidget(run_btn)
+
+        # Debugger butonu
+        debug_btn = QPushButton("Debugger Çalıştır")
+        debug_btn.clicked.connect(self.run_debugger)
+        layout.addWidget(debug_btn)
+
+        # Breakpoint ekleme alanı
+        self.bp_input = QLineEdit()
+        self.bp_input.setPlaceholderText("Breakpoint satır numarası (örn: 2)")
+        layout.addWidget(self.bp_input)
+
+        bp_btn = QPushButton("Breakpoint Ekle")
+        bp_btn.clicked.connect(self.add_breakpoint)
+        layout.addWidget(bp_btn)
+
+        # PyPI paket yükleme alanı
+        self.pkg_input = QLineEdit()
+        self.pkg_input.setPlaceholderText("Python paketi adı (örn: requests)")
+        layout.addWidget(self.pkg_input)
+
+        pkg_btn = QPushButton("PyPI'den Paket Yükle")
+        pkg_btn.clicked.connect(self.install_package)
+        layout.addWidget(pkg_btn)
+
+        # Dosya aç/kaydet
+        open_btn = QPushButton("Dosya Aç")
+        open_btn.clicked.connect(self.open_file)
+        layout.addWidget(open_btn)
+
+        save_btn = QPushButton("Kaydet")
+        save_btn.clicked.connect(self.save_file)
+        layout.addWidget(save_btn)
+
+        # Output paneli
+        self.output = QTextEdit()
+        self.output.setReadOnly(True)
+        layout.addWidget(self.output)
+
+        # Debugger objesi
+        self.debugger = None
+
+    def run_code(self):
+        lang = self.lang_combo.currentText()
+        code = self.editor.toPlainText()
+        if lang == "Python":
+            try:
+                exec(code, {})
+                self.output.append("[Python] Kod çalıştırıldı.")
+            except Exception as e:
+                self.output.append(f"Python hatası: {e}")
+        elif lang == "C":
+            with open("temp.c", "w") as f:
+                f.write(code)
+            try:
+                subprocess.run(["gcc", "temp.c", "-o", "temp_exec"], check=True)
+                result = subprocess.run(["./temp_exec"], capture_output=True, text=True)
+                self.output.append(result.stdout)
+            except Exception as e:
+                self.output.append(f"C hatası: {e}")
+
+    def run_debugger(self):
+        lang = self.lang_combo.currentText()
+        code = self.editor.toPlainText()
+        self.debugger = Debugger(lang)
+        self.debugger.run(code, self.output)
+
+    def add_breakpoint(self):
+        if self.debugger:
+            try:
+                line = int(self.bp_input.text())
+                self.debugger.add_breakpoint(line)
+                self.output.append(f"[DEBUG] Breakpoint eklendi: {line}")
+            except ValueError:
+                self.output.append("[DEBUG] Geçersiz satır numarası.")
+
+    def install_package(self):
+        pkg = self.pkg_input.text().strip()
+        if pkg:
+            try:
+                subprocess.run([sys.executable, "-m", "pip", "install", pkg])
+                self.output.append(f"{pkg} paketi yüklendi.")
+            except Exception as e:
+                self.output.append(f"Paket yükleme hatası: {e}")
+
+    def open_file(self):
+        file, _ = QFileDialog.getOpenFileName(self, "Kod Dosyası Aç", "", "Tüm Dosyalar (*)")
+        if file:
+            with open(file, "r", encoding="utf-8") as f:
+                self.editor.setPlainText(f.read())
+
+    def save_file(self):
+        file, _ = QFileDialog.getSaveFileName(self, "Kod Dosyası Kaydet", "", "Tüm Dosyalar (*)")
+        if file:
+            with open(file, "w", encoding="utf-8") as f:
+                f.write(self.editor.toPlainText())
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    ide = VisionistsIDE()
+    ide.show()
+    sys.exit(app.exec())
