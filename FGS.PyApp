@@ -1,0 +1,190 @@
+import os, requests, subprocess, sys
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QLabel, QListWidget,
+    QPushButton, QMessageBox, QProgressBar, QTextEdit, QTabWidget
+)
+
+REPO_URL = "https://api.github.com/repos/aydintepeemlak3867-cloud/FGS-FlourescentOS-Game-Services/contents"
+DOWNLOAD_DIR = "DownloadedAppsStuff"
+
+# -------------------- STORE --------------------
+class FGSStore(QWidget):
+    def __init__(self, library=None):
+        super().__init__()
+        self.library = library
+        layout = QVBoxLayout()
+        self.status = QLabel("🔄 Connecting to FGS Store...")
+        layout.addWidget(self.status)
+
+        self.app_list = QListWidget()
+        layout.addWidget(self.app_list)
+
+        self.install_btn = QPushButton("⬇️ Install Selected Game")
+        self.install_btn.clicked.connect(self.install_app)
+        layout.addWidget(self.install_btn)
+
+        self.details_label = QLabel("ℹ️ Game details will appear here")
+        layout.addWidget(self.details_label)
+
+        self.progress = QProgressBar()
+        layout.addWidget(self.progress)
+
+        self.review_input = QTextEdit()
+        self.review_input.setPlaceholderText("Yorum yaz...")
+        layout.addWidget(self.review_input)
+
+        self.submit_review_btn = QPushButton("💬 Submit Review")
+        self.submit_review_btn.clicked.connect(self.submit_review)
+        layout.addWidget(self.submit_review_btn)
+
+        self.reviews_label = QLabel("📑 Reviews will appear here")
+        layout.addWidget(self.reviews_label)
+
+        self.setLayout(layout)
+        self.pyapps = {}
+        self.reviews = {}
+        self.load_apps()
+
+    def load_apps(self):
+        try:
+            response = requests.get(REPO_URL, timeout=5)
+            if response.status_code == 200:
+                files = response.json()
+                pyapps = [f for f in files if f['name'].endswith('.FluGame')]
+                if pyapps:
+                    self.status.setText("✅ Store Online")
+                    for app in pyapps:
+                        self.app_list.addItem(app['name'])
+                        self.pyapps[app['name']] = app
+                        self.reviews[app['name']] = []
+                else:
+                    self.status.setText("❌ No Games Found")
+            else:
+                self.status.setText("⚠️ Store Error")
+        except requests.exceptions.RequestException:
+            self.status.setText("⚠️ Offline or No Data")
+
+    def install_app(self):
+        selected = self.app_list.currentItem()
+        if selected:
+            app_name = selected.text()
+            app_info = self.pyapps[app_name]
+            url = app_info['download_url']
+            os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+            path = os.path.join(DOWNLOAD_DIR, app_name)
+            try:
+                response = requests.get(url, timeout=10, stream=True)
+                total = int(response.headers.get('content-length', 0))
+                self.progress.setValue(0)
+                with open(path, 'wb') as f:
+                    downloaded = 0
+                    for chunk in response.iter_content(1024):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if total > 0:
+                                self.progress.setValue(int(downloaded * 100 / total))
+                QMessageBox.information(self, "Install", f"{app_name} installed successfully!")
+                if self.library:
+                    self.library.load_local_apps()
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to install {app_name}: {e}")
+
+    def submit_review(self):
+        selected = self.app_list.currentItem()
+        if selected:
+            app_name = selected.text()
+            review = self.review_input.toPlainText().strip()
+            if review:
+                self.reviews[app_name].append(review)
+                self.review_input.clear()
+                self.reviews_label.setText("📑 Reviews:\n" + "\n".join(self.reviews[app_name]))
+
+# -------------------- LIBRARY --------------------
+class FGSLibrary(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout()
+        self.status = QLabel("🔄 Scanning Downloaded Games...")
+        layout.addWidget(self.status)
+
+        self.app_list = QListWidget()
+        layout.addWidget(self.app_list)
+
+        self.run_btn = QPushButton("▶️ Run Selected Game")
+        self.run_btn.clicked.connect(self.run_app)
+        layout.addWidget(self.run_btn)
+
+        self.remove_btn = QPushButton("🗑️ Remove Selected Game")
+        self.remove_btn.clicked.connect(self.remove_app)
+        layout.addWidget(self.remove_btn)
+
+        self.refresh_btn = QPushButton("🔄 Refresh Library")
+        self.refresh_btn.clicked.connect(self.load_local_apps)
+        layout.addWidget(self.refresh_btn)
+
+        self.setLayout(layout)
+        self.load_local_apps()
+
+    def load_local_apps(self):
+        self.app_list.clear()
+        if os.path.exists(DOWNLOAD_DIR):
+            files = os.listdir(DOWNLOAD_DIR)
+            pyapps = [f for f in files if f.endswith(".FluGame")]
+            if pyapps:
+                self.status.setText("✅ Games Found")
+                for app in pyapps:
+                    self.app_list.addItem(app)
+            else:
+                self.status.setText("❌ No Games Found")
+        else:
+            self.status.setText("⚠️ Library Folder Missing")
+
+    def run_app(self):
+        selected = self.app_list.currentItem()
+        if selected:
+            app_name = selected.text()
+            path = os.path.join(DOWNLOAD_DIR, app_name)
+            try:
+                subprocess.Popen(["python", path])
+                QMessageBox.information(self, "Run", f"{app_name} is running!")
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to run {app_name}: {e}")
+
+    def remove_app(self):
+        selected = self.app_list.currentItem()
+        if selected:
+            app_name = selected.text()
+            path = os.path.join(DOWNLOAD_DIR, app_name)
+            try:
+                os.remove(path)
+                QMessageBox.information(self, "Remove", f"{app_name} removed successfully!")
+                self.load_local_apps()
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to remove {app_name}: {e}")
+ 
+# -------------------- LAUNCHER --------------------
+class FGSLauncher(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("FGS Launcher v0.3.2")
+        self.resize(800, 600)
+
+        layout = QVBoxLayout()
+        tabs = QTabWidget()
+
+        self.library = FGSLibrary()
+        self.store = FGSStore(library=self.library)
+
+        tabs.addTab(self.store, "🛒 Store")
+        tabs.addTab(self.library, "📚 Library")
+
+        layout.addWidget(tabs)
+        self.setLayout(layout)
+
+# -------------------- MAIN --------------------
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    launcher = FGSLauncher()
+    launcher.show()
+    sys.exit(app.exec())
