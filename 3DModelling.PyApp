@@ -1,0 +1,344 @@
+import sys, json, math, os
+from dataclasses import dataclass, asdict, field
+from typing import List, Dict, Any
+from PyQt6.QtCore import Qt, QPoint, QRectF
+from PyQt6.QtGui import QPainter, QPen, QBrush, QColor, QFont, QWheelEvent, QMouseEvent, QAction, QKeySequence
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
+    QTreeWidget, QTreeWidgetItem, QLabel, QPushButton, QDoubleSpinBox,
+    QFormLayout, QGroupBox, QComboBox, QLineEdit, QFileDialog, QMessageBox,
+    QToolBar, QStatusBar, QTabWidget, QScrollArea, QSlider, QSpinBox, QColorDialog, QMenu
+)
+
+APP_NAME = "3DModelling"
+VERSION = "2.0"
+
+@dataclass
+class Feature:
+    kind: str
+    name: str
+    params: Dict[str, Any] = field(default_factory=dict)
+    visible: bool = True
+
+    def __post_init__(self):
+        self.params.setdefault("x", 0.0)
+        self.params.setdefault("y", 0.0)
+        self.params.setdefault("z", 0.0)
+        self.params.setdefault("opacity", 100)
+        self.params.setdefault("color", "#6f7d95")
+
+@dataclass
+class Body:
+    name: str
+    features: List[Feature] = field(default_factory=list)
+
+class CADDocument:
+    def __init__(self):
+        self.name = "Untitled"
+        self.bodies: List[Body] = [Body("Body1")]
+        self.active_body = 0
+        self.units = "mm"
+        self.dirty = False
+
+    @property
+    def body(self):
+        return self.bodies[self.active_body]
+
+    def add_feature(self, kind, name, params):
+        self.body.features.append(Feature(kind, name, params))
+        self.dirty = True
+
+    def to_dict(self):
+        return {"format": "3DModelling", "version": VERSION, "name": self.name,
+                "units": self.units, "bodies": [asdict(b) for b in self.bodies]}
+
+    @classmethod
+    def from_dict(cls, data):
+        doc = cls()
+        doc.name = data.get("name", "Untitled")
+        doc.units = data.get("units", "mm")
+        doc.bodies = []
+        for bd in data.get("bodies", []):
+            body = Body(bd.get("name", "Body"))
+            for ft in bd.get("features", []):
+                body.features.append(Feature(ft.get("kind", "Feature"), ft.get("name", "Feature"), ft.get("params", {}), ft.get("visible", True)))
+            doc.bodies.append(body)
+        if not doc.bodies:
+            doc.bodies = [Body("Body1")]
+        doc.dirty = False
+        return doc
+
+class Viewport3D(QWidget):
+    def __init__(self, document: CADDocument, parent=None):
+        super().__init__(parent)
+        self.document = document
+        self.yaw = -35.0
+        self.pitch = 25.0
+        self.zoom = 1.0
+        self.pan_x = 0.0
+        self.pan_y = 0.0
+        self.last_mouse = QPoint()
+        self.drag_mode = None
+        self.show_grid = True
+        self.show_axes = True
+        self.selected = -1
+        self.setMinimumSize(500, 400)
+        self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def project(self, p):
+        x, y, z = p
+        ya, pi = math.radians(self.yaw), math.radians(self.pitch)
+        x1 = x * math.cos(ya) - y * math.sin(ya)
+        y1 = x * math.sin(ya) + y * math.cos(ya)
+        z1 = z
+        y2 = y1 * math.cos(pi) - z1 * math.sin(pi)
+        z2 = y1 * math.sin(pi) + z1 * math.cos(pi)
+        scale = min(self.width(), self.height()) * 0.018 * self.zoom
+        return QPoint(int(self.width()/2 + self.pan_x + x1*scale), int(self.height()/2 + self.pan_y - y2*scale))
+
+    def draw_grid(self, p):
+        if not self.show_grid: return
+        p.setPen(QPen(QColor("#252b35"), 1))
+        for i in range(-250, 251, 10):
+            a, b = self.project((i,-250,0)), self.project((i,250,0))
+            c, d = self.project((-250,i,0)), self.project((250,i,0))
+            p.drawLine(a,b); p.drawLine(c,d)
+
+    def draw_axes(self, p):
+        if not self.show_axes: return
+        o = self.project((0,0,0))
+        axes = [((60,0,0), "#ef5350", "X"), ((0,60,0), "#66bb6a", "Y"), ((0,0,60), "#42a5f5", "Z")]
+        for end, col, label in axes:
+            q = self.project(end); p.setPen(QPen(QColor(col), 3)); p.drawLine(o,q); p.drawText(q, label)
+
+    def box_mesh(self, w,h,d):
+        x,y,z=w/2,h/2,d/2
+        return [(-x,-y,0),(x,-y,0),(x,y,0),(-x,y,0),(-x,-y,z),(x,-y,z),(x,y,z),(-x,y,z)]
+
+    def cylinder_mesh(self, r,h,n=32):
+        pts=[]
+        for z in (0,h):
+            for i in range(n):
+                a=2*math.pi*i/n; pts.append((r*math.cos(a),r*math.sin(a),z))
+        faces=[]
+        for i in range(n): faces.append((i,(i+1)%n,n+(i+1)%n,n+i))
+        faces.append(tuple(range(n-1,-1,-1))); faces.append(tuple(range(n,2*n)))
+        return pts,faces
+
+    def transform_point(self, pt, f):
+        x,y,z=pt; p=f.params
+        rx,ry,rz=[math.radians(float(p.get(k,0))) for k in ("rx","ry","rz")]
+        # X rotation
+        cy,sy=math.cos(rx),math.sin(rx); y,z=y*cy-z*sy,y*sy+z*cy
+        # Y rotation
+        cy,sy=math.cos(ry),math.sin(ry); x,z=x*cy+z*sy,-x*sy+z*cy
+        # Z rotation
+        cz,sz=math.cos(rz),math.sin(rz); x,y=x*cz-y*sz,x*sz+y*cz
+        return (x+float(p.get("x",0)),y+float(p.get("y",0)),z+float(p.get("z",0)))
+
+    def feature_geometry(self, f):
+        p=f.params
+        if f.kind in ("Box","Extrude"):
+            w=float(p.get("width",50)); h=float(p.get("height",50)); d=float(p.get("depth",p.get("distance",50)))
+            return self.box_mesh(w,h,d), [(0,1,2,3),(4,7,6,5),(0,4,5,1),(1,5,6,2),(2,6,7,3),(4,0,3,7)]
+        if f.kind=="Cylinder": return self.cylinder_mesh(float(p.get("radius",25)),float(p.get("height",50)))
+        if f.kind=="Sphere":
+            r=float(p.get("radius",25)); rings=16; seg=32; pts=[]
+            for j in range(rings+1):
+                ph=math.pi*j/rings
+                for i in range(seg):
+                    th=2*math.pi*i/seg; pts.append((r*math.sin(ph)*math.cos(th),r*math.sin(ph)*math.sin(th),r*math.cos(ph)+r))
+            faces=[]
+            for j in range(rings):
+                for i in range(seg):
+                    a=j*seg+i; b=j*seg+(i+1)%seg; c=(j+1)*seg+(i+1)%seg; d=(j+1)*seg+i; faces.append((a,b,c,d))
+            return pts,faces
+        if f.kind=="Torus":
+            R=float(p.get("major_radius",35)); r=float(p.get("minor_radius",10)); seg=32; rings=12; pts=[]
+            for j in range(rings):
+                v=2*math.pi*j/rings
+                for i in range(seg):
+                    u=2*math.pi*i/seg; q=R+r*math.cos(v); pts.append((q*math.cos(u),q*math.sin(u),r*math.sin(v)))
+            faces=[]
+            for j in range(rings):
+                for i in range(seg):
+                    a=j*seg+i;b=j*seg+(i+1)%seg;c=((j+1)%rings)*seg+(i+1)%seg;d=((j+1)%rings)*seg+i;faces.append((a,b,c,d))
+            return pts,faces
+        return [],[]
+
+    def draw_feature(self,painter,f,idx):
+        if not f.visible:return
+        pts,faces=self.feature_geometry(f)
+        if not pts:return
+        projected=[self.project(self.transform_point(pt,f)) for pt in pts]
+        base=QColor(str(f.params.get("color","#6f7d95"))); base.setAlpha(max(15,min(255,int(float(f.params.get("opacity",100))*2.55))))
+        edge=QColor("#ffffff") if idx==self.selected else QColor("#46505e"); edge.setAlpha(230 if idx==self.selected else 180)
+        for face in faces:
+            poly=[projected[i] for i in face]; painter.setBrush(QBrush(base)); painter.setPen(QPen(edge,2 if idx==self.selected else 1)); painter.drawPolygon(poly)
+
+    def paintEvent(self,event):
+        p=QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.fillRect(self.rect(), QColor("#11151c")); self.draw_grid(p); self.draw_axes(p)
+        for i,f in enumerate(self.document.body.features): self.draw_feature(p,f,i)
+        p.setPen(QColor("#8993a4")); p.drawText(15,25,f"{self.document.name}  •  {self.document.units}")
+        p.drawText(15,self.height()-15,"LMB: select  •  MMB: orbit  •  Shift+MMB: pan  •  Wheel: zoom")
+
+    def mousePressEvent(self,e: QMouseEvent):
+        self.last_mouse=e.position().toPoint()
+        if e.button()==Qt.MouseButton.MiddleButton: self.drag_mode="pan" if e.modifiers() & Qt.KeyboardModifier.ShiftModifier else "orbit"
+        elif e.button()==Qt.MouseButton.LeftButton:
+            self.selected=(self.selected+1)%len(self.document.body.features) if self.document.body.features else -1
+            self.update()
+            self.parent().parent().feature_selected(self.selected) if hasattr(self.parent().parent(),'feature_selected') else None
+
+    def mouseMoveEvent(self,e):
+        if not self.drag_mode:return
+        q=e.position().toPoint(); dx=q.x()-self.last_mouse.x(); dy=q.y()-self.last_mouse.y(); self.last_mouse=q
+        if self.drag_mode=="orbit": self.yaw+=dx*0.5; self.pitch=max(-89,min(89,self.pitch+dy*0.5))
+        else:self.pan_x+=dx;self.pan_y+=dy
+        self.update()
+
+    def mouseReleaseEvent(self,e): self.drag_mode=None
+    def keyPressEvent(self,e):
+        if e.key()==Qt.Key.Key_Delete and self.selected>=0:
+            self.parent().parent().delete_selected(); e.accept(); return
+        if e.key()==Qt.Key.Key_H and self.selected>=0:
+            self.parent().parent().toggle_visibility(); e.accept(); return
+        super().keyPressEvent(e)
+    def wheelEvent(self,e:QWheelEvent): self.zoom=max(.15,min(8,self.zoom*(1.12 if e.angleDelta().y()>0 else .89)));self.update()
+
+class PropertiesPanel(QWidget):
+    def __init__(self, main):
+        super().__init__(); self.main=main; self.current=-1
+        self.layout=QVBoxLayout(self); self.title=QLabel("No selection"); self.title.setStyleSheet("font-size:16px;font-weight:bold"); self.layout.addWidget(self.title)
+        self.form=QFormLayout(); self.layout.addLayout(self.form); self.layout.addStretch()
+
+    def show_feature(self,idx):
+        self.current=idx
+        while self.form.rowCount(): self.form.removeRow(0)
+        if idx<0 or idx>=len(self.main.doc.body.features): self.title.setText("No selection"); return
+        f=self.main.doc.body.features[idx]; self.title.setText(f"{f.kind} • {f.name}")
+        name=QLineEdit(f.name); name.editingFinished.connect(lambda:self.rename(name.text())); self.form.addRow("Name",name)
+        for key in ("x","y","z","rx","ry","rz"):
+            sp=QDoubleSpinBox(); sp.setRange(-100000,100000); sp.setDecimals(2); sp.setValue(float(f.params.get(key,0))); sp.valueChanged.connect(lambda v,k=key:self.change(k,v)); self.form.addRow(key.upper(),sp)
+        if f.kind in ("Box","Extrude"):
+            for key in ("width","height","depth","distance"):
+                if key in f.params:
+                    sp=QDoubleSpinBox();sp.setRange(0.01,100000);sp.setDecimals(2);sp.setValue(float(f.params[key]));sp.valueChanged.connect(lambda v,k=key:self.change(k,v));self.form.addRow(key.capitalize(),sp)
+        elif f.kind=="Cylinder":
+            for key in ("radius","height"):
+                sp=QDoubleSpinBox();sp.setRange(0.01,100000);sp.setDecimals(2);sp.setValue(float(f.params[key]));sp.valueChanged.connect(lambda v,k=key:self.change(k,v));self.form.addRow(key.capitalize(),sp)
+        elif f.kind in ("Sphere",):
+            sp=QDoubleSpinBox();sp.setRange(0.01,100000);sp.setDecimals(2);sp.setValue(float(f.params["radius"]));sp.valueChanged.connect(lambda v:self.change("radius",v));self.form.addRow("Radius",sp)
+        elif f.kind=="Torus":
+            for key in ("major_radius","minor_radius"):
+                sp=QDoubleSpinBox();sp.setRange(0.01,100000);sp.setDecimals(2);sp.setValue(float(f.params[key]));sp.valueChanged.connect(lambda v,k=key:self.change(k,v));self.form.addRow(key.replace("_"," ").title(),sp)
+        slider=QSlider(Qt.Orientation.Horizontal);slider.setRange(5,100);slider.setValue(int(f.params.get("opacity",100)));slider.valueChanged.connect(lambda v:self.change("opacity",v));self.form.addRow("Opacity",slider)
+        color=QPushButton("Choose Color");color.clicked.connect(self.choose_color);self.form.addRow("Material",color)
+        vis=QPushButton("Hide" if f.visible else "Show");vis.clicked.connect(self.main.toggle_visibility);self.form.addRow("Visibility",vis)
+
+    def rename(self,s):
+        if self.current>=0:self.main.doc.body.features[self.current].name=s;self.main.doc.dirty=True;self.main.refresh_tree();self.main.viewport.update()
+    def change(self,k,v):
+        if self.current>=0:self.main.doc.body.features[self.current].params[k]=v;self.main.doc.dirty=True;self.main.viewport.update()
+    def choose_color(self):
+        if self.current<0:return
+        c=QColorDialog.getColor(QColor(self.main.doc.body.features[self.current].params.get("color","#6f7d95")),self,"Choose material color")
+        if c.isValid():self.change("color",c.name());self.show_feature(self.current)
+
+class ModellingWindow(QMainWindow):
+    def __init__(self):
+        super().__init__(); self.doc=CADDocument(); self.setWindowTitle(APP_NAME); self.resize(1450,900); self._build()
+
+    def _build(self):
+        self.setStyleSheet("""
+        QMainWindow,QWidget{background:#171b22;color:#e6eaf0;} QTreeWidget,QLineEdit,QComboBox,QDoubleSpinBox{background:#202631;border:1px solid #303846;border-radius:4px;padding:5px;color:#e6eaf0;} QPushButton{background:#283243;border:1px solid #3a4658;border-radius:5px;padding:7px;} QPushButton:hover{background:#344155;} QGroupBox{border:1px solid #303846;margin-top:8px;padding:8px;} QGroupBox::title{left:8px;subcontrol-origin:margin;} QToolBar{background:#1b2029;border:0;} QStatusBar{background:#1b2029;}
+        """)
+        menu=self.menuBar(); filem=menu.addMenu("File"); new=QAction("New",self);new.triggered.connect(self.new_doc);opena=QAction("Open…",self);opena.triggered.connect(self.open_doc);save=QAction("Save",self);save.triggered.connect(self.save_doc);saveas=QAction("Save As…",self);saveas.triggered.connect(lambda:self.save_doc(True));filem.addActions([new,opena,save,saveas])
+        viewm=menu.addMenu("View"); grid=QAction("Toggle Grid",self);grid.triggered.connect(self.toggle_grid);viewm.addAction(grid); axes=QAction("Toggle Axes",self);axes.triggered.connect(lambda:self.toggle_axes());viewm.addAction(axes); iso=QAction("Isolate Selected",self);iso.triggered.connect(self.isolate_selected);viewm.addAction(iso)
+        tb=QToolBar("Design");tb.setMovable(False);self.addToolBar(tb)
+        for label,fn in [("Sketch",self.add_sketch),("Box",self.add_box),("Cylinder",self.add_cylinder),("Sphere",self.add_sphere),("Torus",self.add_torus),("Extrude",self.add_extrude),("Fillet",self.add_fillet),("Chamfer",self.add_chamfer),("Delete",self.delete_selected),("Duplicate",self.duplicate_selected),("Hide/Show",self.toggle_visibility)]:
+            a=QAction(label,self);a.triggered.connect(fn);tb.addAction(a)
+        central=QSplitter(Qt.Orientation.Horizontal);self.setCentralWidget(central)
+        left=QWidget();ll=QVBoxLayout(left);head=QLabel("Browser");head.setStyleSheet("font-weight:bold;font-size:15px");ll.addWidget(head);self.tree=QTreeWidget();self.tree.setHeaderHidden(True);self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);self.tree.customContextMenuRequested.connect(self.tree_menu);self.tree.itemClicked.connect(self.tree_clicked);ll.addWidget(self.tree);central.addWidget(left)
+        center=QWidget();cl=QVBoxLayout(center);self.viewport=Viewport3D(self.doc);cl.addWidget(self.viewport,1)
+        self.timeline=QTabWidget();self.timeline.addTab(QLabel("Parametric feature history appears here as features are created."),"Timeline");cl.addWidget(self.timeline);central.addWidget(center)
+        right=QWidget();rl=QVBoxLayout(right);rl.addWidget(QLabel("Properties"));self.props=PropertiesPanel(self);rl.addWidget(self.props);g=QGroupBox("View");gl=QVBoxLayout(g)
+        for text,fn in [("Top",lambda:self.set_view(0,90)),("Front",lambda:self.set_view(0,0)),("Right",lambda:self.set_view(90,0)),("Home",lambda:self.set_view(-35,25))]:b=QPushButton(text);b.clicked.connect(fn);gl.addWidget(b)
+        rl.addWidget(g);central.addWidget(right);central.setSizes([240,900,280]);self.setStatusBar(QStatusBar());self.statusBar().showMessage("Ready");self.refresh_tree();self.viewport.setFocus()
+        delete_action=QAction(self);delete_action.setShortcut(QKeySequence(Qt.Key.Key_Delete));delete_action.triggered.connect(self.delete_selected);self.addAction(delete_action)
+
+    def set_view(self,y,p):self.viewport.yaw=y;self.viewport.pitch=p;self.viewport.update()
+    def toggle_grid(self):self.viewport.show_grid=not self.viewport.show_grid;self.viewport.update()
+    def toggle_axes(self):self.viewport.show_axes=not self.viewport.show_axes;self.viewport.update()
+    def new_doc(self):self.doc=CADDocument();self.viewport.document=self.doc;self.refresh_tree();self.props.show_feature(-1);self.viewport.update()
+    def add_feature(self,k,n,p):self.doc.add_feature(k,n,p);self.refresh_tree();self.viewport.selected=len(self.doc.body.features)-1;self.props.show_feature(self.viewport.selected);self.viewport.update();self.statusBar().showMessage(f"Created {n}")
+    def add_sketch(self):self.add_feature("Sketch","Sketch1",{"plane":"XY","geometry":"Rectangle 50 x 50","width":50.0,"height":50.0})
+    def add_box(self):self.add_feature("Box","Box1",{"width":50.0,"height":50.0,"depth":50.0})
+    def add_cylinder(self):self.add_feature("Cylinder","Cylinder1",{"radius":25.0,"height":50.0})
+    def add_sphere(self):self.add_feature("Sphere","Sphere1",{"radius":30.0})
+    def add_torus(self):self.add_feature("Torus","Torus1",{"major_radius":35.0,"minor_radius":10.0})
+    def add_extrude(self):self.add_feature("Extrude","Extrude1",{"width":50.0,"height":50.0,"distance":30.0,"operation":"New Body"})
+    def add_fillet(self):self.add_feature("Fillet","Fillet1",{"radius":5.0,"edges":"Selected"})
+    def add_chamfer(self):self.add_feature("Chamfer","Chamfer1",{"distance":3.0,"edges":"Selected"})
+    def delete_selected(self):
+        i=self.viewport.selected
+        if i<0 or i>=len(self.doc.body.features):return
+        f=self.doc.body.features[i]
+        r=QMessageBox.question(self,"Delete Feature",f"Delete {f.name}?",QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No)
+        if r!=QMessageBox.StandardButton.Yes:return
+        del self.doc.body.features[i];self.viewport.selected=min(i,len(self.doc.body.features)-1);self.doc.dirty=True;self.refresh_tree();self.props.show_feature(self.viewport.selected);self.viewport.update();self.statusBar().showMessage("Feature deleted")
+    def duplicate_selected(self):
+        i=self.viewport.selected
+        if i<0 or i>=len(self.doc.body.features):return
+        src=self.doc.body.features[i]; params=dict(src.params);params["x"]=float(params.get("x",0))+15;params["y"]=float(params.get("y",0))+15
+        self.add_feature(src.kind,src.name+" Copy",params)
+    def toggle_visibility(self):
+        i=self.viewport.selected
+        if i<0 or i>=len(self.doc.body.features):return
+        self.doc.body.features[i].visible=not self.doc.body.features[i].visible;self.doc.dirty=True;self.refresh_tree();self.props.show_feature(i);self.viewport.update()
+    def isolate_selected(self):
+        i=self.viewport.selected
+        if i<0:return
+        for n,f in enumerate(self.doc.body.features):f.visible=(n==i)
+        self.doc.dirty=True;self.refresh_tree();self.viewport.update()
+    def refresh_tree(self):
+        self.tree.clear();root=QTreeWidgetItem([self.doc.name]);self.tree.addTopLevelItem(root);body=QTreeWidgetItem([self.doc.body.name]);root.addChild(body)
+        for i,f in enumerate(self.doc.body.features):
+            it=QTreeWidgetItem([f"{'👁' if f.visible else '🚫'} {f.kind}: {f.name}"]);it.setData(0,Qt.ItemDataRole.UserRole,i);body.addChild(it)
+        root.setExpanded(True);body.setExpanded(True)
+    def tree_menu(self,pos):
+        it=self.tree.itemAt(pos)
+        if not it:return
+        idx=it.data(0,Qt.ItemDataRole.UserRole)
+        if idx is None:return
+        self.viewport.selected=int(idx);self.props.show_feature(self.viewport.selected);self.viewport.update()
+        m=QMenu(self);a=m.addAction("Delete");a.triggered.connect(self.delete_selected);b=m.addAction("Duplicate");b.triggered.connect(self.duplicate_selected);c=m.addAction("Hide / Show");c.triggered.connect(self.toggle_visibility);d=m.addAction("Isolate");d.triggered.connect(self.isolate_selected);m.exec(self.tree.viewport().mapToGlobal(pos))
+    def tree_clicked(self,it,col):
+        idx=it.data(0,Qt.ItemDataRole.UserRole);self.viewport.selected=int(idx) if idx is not None else -1;self.props.show_feature(self.viewport.selected);self.viewport.update()
+    def feature_selected(self,idx):self.props.show_feature(idx);self.tree.setCurrentItem(self.tree.findItems("",Qt.MatchFlag.MatchContains)[0] if False else self.tree.currentItem())
+    def save_doc(self,save_as=False):
+        path=getattr(self,"path","")
+        if save_as or not path:path,_=QFileDialog.getSaveFileName(self,"Save 3D Model","Untitled.3dm","3DModelling (*.3dm.json)")
+        if not path:return
+        try:
+            with open(path,"w",encoding="utf-8") as f:json.dump(self.doc.to_dict(),f,indent=2)
+            self.path=path;self.doc.dirty=False;self.statusBar().showMessage(f"Saved: {path}")
+        except Exception as e:QMessageBox.critical(self,"Save Error",str(e))
+    def open_doc(self):
+        path,_=QFileDialog.getOpenFileName(self,"Open 3D Model","","3DModelling (*.3dm.json);;JSON (*.json)")
+        if not path:return
+        try:
+            with open(path,"r",encoding="utf-8") as f:self.doc=CADDocument.from_dict(json.load(f))
+            self.path=path;self.viewport.document=self.doc;self.refresh_tree();self.props.show_feature(-1);self.viewport.update();self.statusBar().showMessage(f"Opened: {path}")
+        except Exception as e:QMessageBox.critical(self,"Open Error",str(e))
+    def closeEvent(self,e):
+        if self.doc.dirty:
+            r=QMessageBox.question(self,"Unsaved Changes","Save changes before closing?",QMessageBox.StandardButton.Save|QMessageBox.StandardButton.Discard|QMessageBox.StandardButton.Cancel)
+            if r==QMessageBox.StandardButton.Save:self.save_doc()
+            if r==QMessageBox.StandardButton.Cancel:e.ignore();return
+        e.accept()
+
+if __name__=="__main__":
+    app=QApplication(sys.argv);app.setApplicationName(APP_NAME);w=ModellingWindow();w.show();sys.exit(app.exec())
