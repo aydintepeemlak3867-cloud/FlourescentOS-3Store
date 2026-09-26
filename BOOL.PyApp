@@ -1,0 +1,454 @@
+import sys
+import math
+import random
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
+    QLabel, QPushButton
+)
+from PyQt6.QtCore import Qt, QTimer, QPointF
+from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QFont, QPolygonF
+
+WORLD_W = 340
+WORLD_H = 600
+
+class Ball:
+    def __init__(self, x, y, radius=12, is_cue=False):
+        self.x = x
+        self.y = y
+        self.vx = 0.0
+        self.vy = 0.0
+        self.radius = radius
+        self.is_cue = is_cue
+        self.is_exploded = False
+        self.timer = random.randint(7, 13) if not is_cue else 999
+        self.color = QColor("#ffffff") if is_cue else QColor("#e62e2e")
+
+    def update(self, dt):
+        self.x += self.vx
+        self.y += self.vy
+        self.vx *= 0.985
+        self.vy *= 0.985
+
+        if abs(self.vx) < 0.05: self.vx = 0
+        if abs(self.vy) < 0.05: self.vy = 0
+
+        if not self.is_cue and not self.is_exploded:
+            self.timer -= dt
+            if self.timer <= 0:
+                self.is_exploded = True
+
+
+class IsoBrawlCanvas(QWidget):
+    # Parametreleri opsiyonel yaparak argümansız çağrılmalara karşı koruyoruz
+    def __init__(self, score_cb=None, status_cb=None):
+        super().__init__()
+        self.setMinimumSize(850, 680)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        
+        # Callback güvenliği
+        self.score_cb = score_cb if score_cb else (lambda val: None)
+        self.status_cb = status_cb if status_cb else (lambda msg: None)
+
+        self.state = 'INTRO'
+        self.kx = 0.85
+        self.ky = 0.42
+
+        self.balls = []
+        self.particles = []
+        self.text_popups = []
+        self.score = 0
+        self.anim_tick = 0
+
+        self.is_aiming = False
+        self.drag_start = QPointF()
+        self.drag_current = QPointF()
+
+        self.pockets = [
+            (20, 20), (WORLD_W / 2, 15), (WORLD_W - 20, 20),
+            (20, WORLD_H - 20), (WORLD_W / 2, WORLD_H - 15), (WORLD_W - 20, WORLD_H - 20)
+        ]
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.game_loop)
+        self.timer.start(16)
+
+        self.reset_game()
+
+    def to_screen(self, wx, wy, wz=0):
+        cx = self.width() / 2
+        cy = 110
+        sx = cx + (wx - wy) * self.kx
+        sy = cy + (wx + wy) * self.ky - wz
+        return sx, sy
+
+    def to_world(self, sx, sy):
+        cx = self.width() / 2
+        cy = 110
+        u = (sx - cx) / self.kx
+        v = (sy - cy) / self.ky
+        wx = (u + v) / 2
+        wy = (v - u) / 2
+        return wx, wy
+
+    def reset_game(self):
+        self.balls.clear()
+        self.particles.clear()
+        self.text_popups.clear()
+        self.score = 0
+
+        self.cue_ball = Ball(WORLD_W / 2, 110, is_cue=True)
+        self.balls.append(self.cue_ball)
+
+        start_x, start_y = WORLD_W / 2, 420
+        rows = 4
+        spacing = 26
+        for r in range(rows):
+            for c in range(r + 1):
+                bx = start_x + (c - r / 2.0) * spacing
+                by = start_y + r * (spacing * 0.866)
+                self.balls.append(Ball(bx, by))
+
+    def trigger_brawl(self):
+        if self.state != 'GAME': return
+        self.state = 'FIGHT'
+        self.status_cb("⚠️ MASADA KAVGA ÇIKTI! BAYRAKLAR AÇILDI!")
+
+    def spawn_fight_text(self):
+        center_sx, center_sy = self.to_screen(WORLD_W / 2, WORLD_H / 2)
+        txt = random.choice(["POW!", "BAM!", "CRASH!", "PUFF!", "BOOM!", "OOF!"])
+        color = random.choice(["#ff3333", "#ffcc00", "#ffffff", "#3399ff", "#ff00ff"])
+        
+        self.text_popups.append({
+            'x': center_sx + random.uniform(-80, 80),
+            'y': center_sy + random.uniform(-40, 40),
+            'vy': random.uniform(-2.0, -0.5),
+            'vx': random.uniform(-1.0, 1.0),
+            'txt': txt,
+            'color': QColor(color),
+            'life': 1.0,
+            'size': random.randint(18, 28)
+        })
+
+    def game_loop(self):
+        self.anim_tick += 1
+        dt = 0.016
+
+        if self.state == 'GAME':
+            for b in self.balls[:]:
+                b.update(dt)
+
+                m = 18
+                if b.x - b.radius < m:
+                    b.x = m + b.radius; b.vx *= -0.85
+                elif b.x + b.radius > WORLD_W - m:
+                    b.x = WORLD_W - m - b.radius; b.vx *= -0.85
+
+                if b.y - b.radius < m:
+                    b.y = m + b.radius; b.vy *= -0.85
+                elif b.y + b.radius > WORLD_H - m:
+                    b.y = WORLD_H - m - b.radius; b.vy *= -0.85
+
+                for px, py in self.pockets:
+                    if math.hypot(b.x - px, b.y - py) < 22:
+                        if b.is_cue:
+                            b.x, b.y = WORLD_W / 2, 110
+                            b.vx, b.vy = 0, 0
+                        else:
+                            self.score += 100
+                            self.score_cb(self.score)
+                            self.add_particles(b.x, b.y, b.color)
+                            if b in self.balls: self.balls.remove(b)
+
+                if b.is_exploded:
+                    self.add_particles(b.x, b.y, QColor("#ff3300"), count=25)
+                    for target in self.balls:
+                        dist = math.hypot(target.x - b.x, target.y - b.y)
+                        if 0 < dist < 140:
+                            force = (140 - dist) / 5.0
+                            ang = math.atan2(target.y - b.y, target.x - b.x)
+                            target.vx += math.cos(ang) * force
+                            target.vy += math.sin(ang) * force
+                    if b in self.balls: self.balls.remove(b)
+
+            for i in range(len(self.balls)):
+                for j in range(i + 1, len(self.balls)):
+                    b1, b2 = self.balls[i], self.balls[j]
+                    dx, dy = b2.x - b1.x, b2.y - b1.y
+                    dist = math.hypot(dx, dy)
+                    min_dist = b1.radius + b2.radius
+                    if 0 < dist < min_dist:
+                        overlap = 0.5 * (min_dist - dist)
+                        nx, ny = dx / dist, dy / dist
+                        b1.x -= nx * overlap; b1.y -= ny * overlap
+                        b2.x += nx * overlap; b2.y += ny * overlap
+                        kx, ky = b1.vx - b2.vx, b1.vy - b2.vy
+                        p = 2 * (nx * kx + ny * ky) / 2.0
+                        b1.vx -= p * nx; b1.vy -= p * ny
+                        b2.vx += p * nx; b2.vy += p * ny
+
+        elif self.state == 'FIGHT':
+            if self.anim_tick % 12 == 0:
+                self.spawn_fight_text()
+
+            for pop in self.text_popups[:]:
+                pop['x'] += pop['vx']
+                pop['y'] += pop['vy']
+                pop['life'] -= 0.03
+                if pop['life'] <= 0:
+                    self.text_popups.remove(pop)
+
+        for p in self.particles[:]:
+            p['x'] += p['vx']; p['y'] += p['vy']
+            p['life'] -= 0.04
+            if p['life'] <= 0: self.particles.remove(p)
+
+        self.update()
+
+    def add_particles(self, x, y, color, count=12):
+        for _ in range(count):
+            ang = random.uniform(0, math.pi * 2)
+            spd = random.uniform(1, 5)
+            self.particles.append({'x': x, 'y': y, 'vx': math.cos(ang)*spd, 'vy': math.sin(ang)*spd, 'life': 1.0, 'color': color})
+
+    def mousePressEvent(self, event):
+        if self.state == 'INTRO':
+            self.state = 'GAME'
+            self.reset_game()
+            self.status_cb("OYUN BAŞLADI!")
+            return
+
+        if self.state == 'GAME' and event.button() == Qt.MouseButton.LeftButton:
+            m_wx, m_wy = self.to_world(event.position().x(), event.position().y())
+            if math.hypot(m_wx - self.cue_ball.x, m_wy - self.cue_ball.y) < 28 and self.cue_ball.vx == 0 and self.cue_ball.vy == 0:
+                self.is_aiming = True
+                self.drag_start = QPointF(self.cue_ball.x, self.cue_ball.y)
+                self.drag_current = event.position()
+
+    def mouseMoveEvent(self, event):
+        if self.is_aiming:
+            self.drag_current = event.position()
+
+    def mouseReleaseEvent(self, event):
+        if self.state == 'GAME' and event.button() == Qt.MouseButton.LeftButton and self.is_aiming:
+            self.is_aiming = False
+            cur_wx, cur_wy = self.to_world(self.drag_current.x(), self.drag_current.y())
+            dx = self.drag_start.x() - cur_wx
+            dy = self.drag_start.y() - cur_wy
+            power = min(math.hypot(dx, dy) * 0.18, 20.0)
+            angle = math.atan2(dy, dx)
+            self.cue_ball.vx = math.cos(angle) * power
+            self.cue_ball.vy = math.sin(angle) * power
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        if self.state == 'INTRO':
+            painter.fillRect(self.rect(), QColor("#0a0a10"))
+            painter.setPen(QColor("#ffcc00"))
+            painter.setFont(QFont("Impact", 32, QFont.Weight.Bold))
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter, "💣 BOMBALI BİLARDO\n& KAVGA ARENASI 🥊")
+            
+            if (self.anim_tick // 20) % 2 == 0:
+                painter.setPen(QColor("#ffffff"))
+                painter.setFont(QFont("Consolas", 14, QFont.Weight.Bold))
+                painter.drawText(0, self.height() - 120, self.width(), 40, Qt.AlignmentFlag.AlignCenter, "[ BAŞLAMAK İÇİN EKRANA TIKLAYIN ]")
+            return
+
+        painter.fillRect(self.rect(), QColor("#08080c"))
+
+        p1 = QPointF(*self.to_screen(0, 0, 0))
+        p2 = QPointF(*self.to_screen(WORLD_W, 0, 0))
+        p3 = QPointF(*self.to_screen(WORLD_W, WORLD_H, 0))
+        p4 = QPointF(*self.to_screen(0, WORLD_H, 0))
+
+        h = 25
+        p2_b = QPointF(*self.to_screen(WORLD_W, 0, -h))
+        p3_b = QPointF(*self.to_screen(WORLD_W, WORLD_H, -h))
+        p4_b = QPointF(*self.to_screen(0, WORLD_H, -h))
+
+        painter.setPen(QPen(QColor("#0a0500"), 1))
+        painter.setBrush(QBrush(QColor("#2a1205")))
+        painter.drawPolygon(QPolygonF([p2, p3, p3_b, p2_b]))
+        painter.setBrush(QBrush(QColor("#1f0d04")))
+        painter.drawPolygon(QPolygonF([p3, p4, p4_b, p3_b]))
+
+        painter.setBrush(QBrush(QColor("#0b532a")))
+        painter.drawPolygon(QPolygonF([p1, p2, p3, p4]))
+
+        painter.setPen(QPen(QColor("#3d1b08"), 6))
+        painter.drawPolyline(QPolygonF([p1, p2, p3, p4, p1]))
+
+        painter.setBrush(QBrush(QColor("#000000")))
+        painter.setPen(Qt.PenStyle.NoPen)
+        for px, py in self.pockets:
+            sx, sy = self.to_screen(px, py)
+            painter.drawEllipse(QPointF(sx, sy), 18, 10)
+
+        if self.state == 'GAME':
+            p1_sx, p1_sy = self.to_screen(-30, 100)
+            self.draw_character(painter, p1_sx, p1_sy, QColor("#ff3333"), "P1 (Kırmızı)")
+
+            p2_sx, p2_sy = self.to_screen(WORLD_W + 30, WORLD_H - 100)
+            self.draw_character(painter, p2_sx, p2_sy, QColor("#3388ff"), "P2 (Mavi)")
+
+            sorted_balls = sorted(self.balls, key=lambda b: b.x + b.y)
+            for b in sorted_balls:
+                sx, sy = self.to_screen(b.x, b.y)
+                painter.setBrush(QBrush(QColor(0, 0, 0, 110)))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawEllipse(QPointF(sx, sy + 4), 13, 7)
+
+                painter.setBrush(QBrush(b.color))
+                painter.setPen(QPen(QColor("#000000"), 1))
+                painter.drawEllipse(QPointF(sx, sy - 5), 12, 12)
+
+                if not b.is_cue:
+                    painter.setPen(QColor("#ffffff"))
+                    painter.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+                    painter.drawText(int(sx - 10), int(sy - 22), 20, 12, Qt.AlignmentFlag.AlignCenter, str(max(0, int(b.timer))))
+
+            if self.is_aiming:
+                cue_sx, cue_sy = self.to_screen(self.cue_ball.x, self.cue_ball.y)
+                painter.setPen(QPen(QColor("#ffcc00"), 2, Qt.PenStyle.DashLine))
+                painter.drawLine(QPointF(cue_sx, cue_sy - 5), self.drag_current)
+
+        elif self.state == 'FIGHT':
+            center_sx, center_sy = self.to_screen(WORLD_W / 2, WORLD_H / 2)
+
+            shake_x = math.sin(self.anim_tick * 0.5) * 8
+            shake_y = math.cos(self.anim_tick * 0.5) * 5
+            painter.setBrush(QBrush(QColor(230, 230, 230, 160)))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QPointF(center_sx + shake_x, center_sy + shake_y), 75, 45)
+
+            p1_x = center_sx + math.sin(self.anim_tick * 0.8) * 20
+            p2_x = center_sx - math.sin(self.anim_tick * 0.8) * 20
+            painter.setBrush(QBrush(QColor("#ff3333")))
+            painter.drawEllipse(QPointF(p1_x, center_sy - 10), 14, 14)
+            painter.setBrush(QBrush(QColor("#3388ff")))
+            painter.drawEllipse(QPointF(p2_x, center_sy - 5), 14, 14)
+
+            for pop in self.text_popups:
+                col = pop['color']
+                col.setAlpha(int(pop['life'] * 255))
+                painter.setPen(col)
+                painter.setFont(QFont("Impact", pop['size'], QFont.Weight.Bold))
+                painter.drawText(int(pop['x']), int(pop['y']), pop['txt'])
+
+            self.draw_flag(painter, 50, 60, QColor("#cc0000"), "KIRMIZI\nCEPHESİ", True)
+            self.draw_flag(painter, self.width() - 130, 60, QColor("#0055cc"), "MAVİ\nBİRLİĞİ", False)
+
+        for p in self.particles:
+            sx, sy = self.to_screen(p['x'], p['y'])
+            c = p['color']
+            c.setAlpha(int(p['life'] * 255))
+            painter.setBrush(QBrush(c))
+            painter.drawEllipse(QPointF(sx, sy), 3, 2)
+
+    def draw_character(self, painter, x, y, body_color, label):
+        painter.setBrush(QBrush(QColor(0, 0, 0, 120)))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QPointF(x, y + 10), 16, 8)
+
+        painter.setBrush(QBrush(body_color))
+        painter.setPen(QPen(QColor("#ffffff"), 1.5))
+        painter.drawRect(int(x - 8), int(y - 20), 16, 22)
+        painter.drawEllipse(QPointF(x, y - 28), 12, 12)
+
+        painter.setPen(QPen(QColor("#d2b48c"), 3))
+        painter.drawLine(QPointF(x - 15, y - 10), QPointF(x + 15, y - 5))
+
+        painter.setPen(QColor("#ffffff"))
+        painter.setFont(QFont("Arial", 8, QFont.Weight.Bold))
+        painter.drawText(int(x - 30), int(y - 42), 60, 12, Qt.AlignmentFlag.AlignCenter, label)
+
+    def draw_flag(self, painter, x, y, bg_color, text, is_left):
+        painter.setPen(QPen(QColor("#aaaaaa"), 4))
+        painter.drawLine(int(x), int(y), int(x), int(y + 140))
+
+        wave = math.sin(self.anim_tick * 0.1) * 6
+        flag_w, flag_h = 80, 50
+        fx = x if is_left else x - flag_w
+        
+        poly = QPolygonF([
+            QPointF(fx, y),
+            QPointF(fx + flag_w, y + wave),
+            QPointF(fx + flag_w, y + flag_h + wave),
+            QPointF(fx, y + flag_h)
+        ])
+        
+        painter.setBrush(QBrush(bg_color))
+        painter.setPen(QPen(QColor("#ffffff"), 2))
+        painter.drawPolygon(poly)
+
+        painter.setPen(QColor("#ffffff"))
+        painter.setFont(QFont("Impact", 10))
+        painter.drawText(int(fx), int(y + 10), int(flag_w), int(flag_h), Qt.AlignmentFlag.AlignCenter, text)
+
+
+class BilliardsBrawlGame(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("💣 2.5D BOMBALI BİLARDO & KAVGA ARENASI")
+        self.resize(850, 740)
+        self.setStyleSheet("background-color: #08080c; color: #ffffff; font-family: 'Segoe UI', Arial;")
+
+        layout = QVBoxLayout(self)
+
+        top_layout = QHBoxLayout()
+        self.lbl_score = QLabel("SKOR: 0")
+        self.lbl_score.setStyleSheet("font-size: 20px; font-weight: bold; color: #ffcc00;")
+
+        btn_brawl = QPushButton("💥 KAVGA ÇIKAR!")
+        btn_brawl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn_brawl.setStyleSheet("""
+            QPushButton { background-color: #800000; color: #ffffff; border: 2px solid #ff3333; padding: 6px 16px; font-weight: bold; font-size: 13px; }
+            QPushButton:hover { background-color: #ff1111; }
+        """)
+        btn_brawl.clicked.connect(self.trigger_brawl)
+
+        btn_reset = QPushButton("YENİ OYUN")
+        btn_reset.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn_reset.setStyleSheet("""
+            QPushButton { background-color: #1a1a24; color: #aaaaaa; border: 1px solid #444; padding: 6px 14px; font-weight: bold; }
+            QPushButton:hover { background-color: #333344; color: #fff; }
+        """)
+        btn_reset.clicked.connect(self.reset_game)
+
+        top_layout.addWidget(self.lbl_score)
+        top_layout.addStretch()
+        top_layout.addWidget(btn_brawl)
+        top_layout.addSpacing(10)
+        top_layout.addWidget(btn_reset)
+        layout.addLayout(top_layout)
+
+        self.canvas = IsoBrawlCanvas(self.update_score, self.update_status)
+        layout.addWidget(self.canvas)
+
+        self.lbl_info = QLabel("Giriş ekranında tıklayarak oyuna başlayın. Masadaki bombalar patlayabilir veya üstteki butona basarak KAVGA başlatabilirsiniz!")
+        self.lbl_info.setStyleSheet("color: #8888aa; font-size: 11px;")
+        self.lbl_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_info)
+
+    def trigger_brawl(self):
+        self.canvas.trigger_brawl()
+
+    def update_score(self, score):
+        self.lbl_score.setText(f"SKOR: {score}")
+
+    def update_status(self, text):
+        self.lbl_info.setText(text)
+
+    def reset_game(self):
+        self.lbl_score.setText("SKOR: 0")
+        self.canvas.state = 'GAME'
+        self.canvas.reset_game()
+        self.lbl_info.setText("Yeni oyun başlatıldı.")
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = BilliardsBrawlGame()
+    window.show()
+    sys.exit(app.exec())
