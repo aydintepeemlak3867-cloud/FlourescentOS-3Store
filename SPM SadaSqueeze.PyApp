@@ -1,0 +1,331 @@
+import os
+import sys
+import time
+import lzma
+import tarfile
+import struct
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QLabel, QPushButton, QFileDialog, 
+                             QProgressBar, QMessageBox, QFrame, QStackedWidget)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QFont
+
+SSQ_MAGIC = b'SSQ3'
+
+class SqueezerWorker(QThread):
+    progress_signal = pyqtSignal(int, str)
+    finished_signal = pyqtSignal(dict)
+    error_signal = pyqtSignal(str)
+
+    def __init__(self, mode, input_path, output_path):
+        super().__init__()
+        self.mode = mode
+        self.input_path = input_path
+        self.output_path = output_path
+
+    def run(self):
+        try:
+            start_time = time.time()
+            if self.mode == 'COMPRESS':
+                self.compress()
+            else:
+                self.decompress()
+
+            elapsed = time.time() - start_time
+            orig_size = self.get_path_size(self.input_path)
+            new_size = os.path.getsize(self.output_path)
+            ratio = (1 - (new_size / orig_size)) * 100 if orig_size > 0 else 0
+
+            self.finished_signal.emit({
+                "mode": self.mode,
+                "orig_size": orig_size,
+                "new_size": new_size,
+                "ratio": ratio,
+                "time": elapsed,
+                "out_path": self.output_path
+            })
+        except Exception as e:
+            self.error_signal.emit(str(e))
+
+    def get_path_size(self, path):
+        if os.path.isfile(path):
+            return os.path.getsize(path)
+        total_size = 0
+        for dirpath, _, filenames in os.walk(path):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                if not os.path.islink(fp):
+                    total_size += os.path.getsize(fp)
+        return total_size
+
+    def compress(self):
+        self.progress_signal.emit(15, "Dosyalar taranıyor ve sıralanıyor...")
+        
+        temp_tar = self.output_path + ".tmp.tar"
+        
+        file_list = []
+        if os.path.isdir(self.input_path):
+            for root, _, files in os.walk(self.input_path):
+                for file in files:
+                    full_path = os.path.join(root, file)
+                    if not os.path.islink(full_path):
+                        file_list.append(full_path)
+            file_list.sort()
+            
+            with tarfile.open(temp_tar, "w") as tar:
+                for full_path in file_list:
+                    rel_path = os.path.relpath(full_path, os.path.dirname(self.input_path))
+                    tar.add(full_path, arcname=rel_path)
+        else:
+            with tarfile.open(temp_tar, "w") as tar:
+                tar.add(self.input_path, arcname=os.path.basename(self.input_path))
+
+        self.progress_signal.emit(40, "Arşiv verisi okunuyor...")
+        with open(temp_tar, 'rb') as f_in:
+            tar_data = f_in.read()
+        os.remove(temp_tar)
+
+        self.progress_signal.emit(65, "LZMA2 Extreme (64MB Sözlük) ile sıkıştırılıyor...")
+        
+        lzma_filters = [
+            {"id": lzma.FILTER_LZMA2, "preset": 9 | lzma.PRESET_EXTREME, "dict_size": 64 * 1024 * 1024}
+        ]
+        compressed_data = lzma.compress(tar_data, format=lzma.FORMAT_RAW, filters=lzma_filters)
+
+        self.progress_signal.emit(90, ".ssq paketi mühürleniyor...")
+        header = SSQ_MAGIC + struct.pack('>Q', len(tar_data))
+
+        with open(self.output_path, 'wb') as f_out:
+            f_out.write(header)
+            f_out.write(compressed_data)
+
+        self.progress_signal.emit(100, "Tamamlandı!")
+
+    def decompress(self):
+        self.progress_signal.emit(30, ".ssq paketi doğrulanıyor...")
+        with open(self.input_path, 'rb') as f_in:
+            magic = f_in.read(4)
+            if magic != SSQ_MAGIC:
+                raise Exception("Geçersiz dosya! Bu geçerli bir .ssq paketi değil.")
+            tar_size = struct.unpack('>Q', f_in.read(8))[0]
+            compressed_data = f_in.read()
+
+        self.progress_signal.emit(60, "Arşiv verisi çözülüyor...")
+        lzma_filters = [{"id": lzma.FILTER_LZMA2, "dict_size": 64 * 1024 * 1024}]
+        tar_data = lzma.decompress(compressed_data, format=lzma.FORMAT_RAW, filters=lzma_filters)
+
+        if len(tar_data) != tar_size:
+            raise Exception("Paket bütünlüğü bozulmuş!")
+
+        self.progress_signal.emit(85, "Dosyalar/Klasör çıkarılıyor...")
+        temp_tar = self.output_path + ".tmp.tar"
+        with open(temp_tar, 'wb') as f_out:
+            f_out.write(tar_data)
+
+        with tarfile.open(temp_tar, "r") as tar:
+            tar.extractall(path=self.output_path)
+        os.remove(temp_tar)
+
+        self.progress_signal.emit(100, "Tamamlandı!")
+
+
+class ModernSqueezerApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("SadaSqueezer v3.2 - Pro Engine")
+        self.resize(500, 440)
+        self.setAcceptDrops(True)
+        self.init_ui()
+
+    def init_ui(self):
+        self.setStyleSheet("""
+            QMainWindow { background-color: #121824; }
+            QWidget { background-color: #121824; color: #E2E8F0; font-family: 'Segoe UI', sans-serif; }
+            QFrame#drop_zone {
+                border: 2px dashed #3B82F6;
+                border-radius: 16px;
+                background-color: #1E293B;
+            }
+            QFrame#drop_zone:hover { border-color: #60A5FA; background-color: #26334D; }
+            QPushButton {
+                background-color: #2563EB; color: #FFFFFF; border-radius: 8px;
+                padding: 10px 15px; font-weight: bold; font-size: 10pt; border: none;
+            }
+            QPushButton:hover { background-color: #3B82F6; }
+            QPushButton#btn_secondary { background-color: #334155; color: #94A3B8; }
+            QPushButton#btn_secondary:hover { background-color: #475569; color: #FFF; }
+            QProgressBar {
+                border: none; border-radius: 6px; background-color: #0F172A;
+                text-align: center; color: white; font-weight: bold;
+            }
+            QProgressBar::chunk { background-color: #10B981; border-radius: 6px; }
+        """)
+
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(25, 25, 25, 25)
+
+        header_layout = QHBoxLayout()
+        title_label = QLabel("⚡ SadaSqueezer")
+        title_label.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        title_label.setStyleSheet("color: #60A5FA;")
+        
+        badge_label = QLabel(".SSQ (PRO)")
+        badge_label.setStyleSheet("background-color: #2563EB; color: white; padding: 3px 8px; border-radius: 6px; font-weight: bold; font-size: 8pt;")
+
+        header_layout.addWidget(title_label)
+        header_layout.addWidget(badge_label)
+        header_layout.addStretch()
+        main_layout.addLayout(header_layout)
+
+        self.stack = QStackedWidget()
+        self.init_drop_page()
+        self.init_process_page()
+        self.init_result_page()
+
+        self.stack.addWidget(self.drop_page)
+        self.stack.addWidget(self.process_page)
+        self.stack.addWidget(self.result_page)
+        main_layout.addWidget(self.stack)
+
+    def init_drop_page(self):
+        self.drop_page = QWidget()
+        layout = QVBoxLayout(self.drop_page)
+        self.drop_zone = QFrame()
+        self.drop_zone.setObjectName("drop_zone")
+        drop_layout = QVBoxLayout(self.drop_zone)
+        drop_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        icon_label = QLabel("📦")
+        icon_label.setFont(QFont("Segoe UI", 42))
+        text_label = QLabel("Dosya veya Klasör sürükleyin")
+        text_label.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+        text_label.setStyleSheet("color: #F8FAFC;")
+        sub_label = QLabel("veya aşağıdaki butonları kullanın")
+        sub_label.setStyleSheet("color: #94A3B8; font-size: 10pt;")
+
+        btn_layout = QHBoxLayout()
+        btn_file = QPushButton("Dosya Seç")
+        btn_folder = QPushButton("Klasör Seç")
+        
+        btn_file.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_folder.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        btn_file.clicked.connect(self.browse_file)
+        btn_folder.clicked.connect(self.browse_folder)
+
+        btn_layout.addWidget(btn_file)
+        btn_layout.addWidget(btn_folder)
+
+        drop_layout.addWidget(icon_label)
+        drop_layout.addWidget(text_label)
+        drop_layout.addWidget(sub_label)
+        drop_layout.addSpacing(15)
+        drop_layout.addLayout(btn_layout)
+        layout.addWidget(self.drop_zone)
+
+    def init_process_page(self):
+        self.process_page = QWidget()
+        layout = QVBoxLayout(self.process_page)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_proc_status = QLabel("İşleniyor...")
+        self.lbl_proc_status.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        self.lbl_proc_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedHeight(12)
+        self.progress_bar.setValue(0)
+        layout.addWidget(self.lbl_proc_status)
+        layout.addSpacing(15)
+        layout.addWidget(self.progress_bar)
+
+    def init_result_page(self):
+        self.result_page = QWidget()
+        layout = QVBoxLayout(self.result_page)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_res_icon = QLabel("🎉")
+        self.lbl_res_icon.setFont(QFont("Segoe UI", 40))
+        self.lbl_res_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_res_title = QLabel("İşlem Tamamlandı!")
+        self.lbl_res_title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        self.lbl_res_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_res_stats = QLabel("")
+        self.lbl_res_stats.setStyleSheet("color: #10B981; font-weight: bold; font-size: 11pt;")
+        self.lbl_res_stats.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        btn_back = QPushButton("Yeni İşlem Yap")
+        btn_back.setObjectName("btn_secondary")
+        btn_back.clicked.connect(lambda: self.stack.setCurrentIndex(0))
+        layout.addWidget(self.lbl_res_icon)
+        layout.addWidget(self.lbl_res_title)
+        layout.addWidget(self.lbl_res_stats)
+        layout.addSpacing(20)
+        layout.addWidget(btn_back)
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        urls = event.mimeData().urls()
+        if urls:
+            path = urls[0].toLocalFile()
+            self.process_path(path)
+
+    def browse_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Sıkıştırılacak Dosyayı Seç")
+        if path:
+            self.process_path(path)
+
+    def browse_folder(self):
+        path = QFileDialog.getExistingDirectory(self, "Sıkıştırılacak Klasörü Seç")
+        if path:
+            self.process_path(path)
+
+    def process_path(self, path):
+        if path.endswith(".ssq"):
+            out_path = QFileDialog.getExistingDirectory(self, "Çıkarılacak Klasörü Seç")
+            if not out_path: return
+            mode = "DECOMPRESS"
+        else:
+            out_path = path + ".ssq"
+            mode = "COMPRESS"
+
+        self.stack.setCurrentIndex(1)
+        self.worker = SqueezerWorker(mode, path, out_path)
+        self.worker.progress_signal.connect(self.update_progress)
+        self.worker.finished_signal.connect(self.show_results)
+        self.worker.error_signal.connect(self.handle_error)
+        self.worker.start()
+
+    def update_progress(self, val, status_text):
+        self.progress_bar.setValue(val)
+        self.lbl_proc_status.setText(status_text)
+
+    def show_results(self, res):
+        self.stack.setCurrentIndex(2)
+        if res['mode'] == 'COMPRESS':
+            orig_mb = res['orig_size'] / (1024 * 1024)
+            new_mb = res['new_size'] / (1024 * 1024)
+            orig_str = f"{orig_mb:.2f} MB" if orig_mb >= 1 else f"{res['orig_size']/1024:.1f} KB"
+            new_str = f"{new_mb:.2f} MB" if new_mb >= 1 else f"{res['new_size']/1024:.1f} KB"
+
+            if res['ratio'] < 1.0:
+                self.lbl_res_icon.setText("⚠️")
+                self.lbl_res_title.setText("Dosya Zaten Sıkıştırılmış!")
+                self.lbl_res_stats.setStyleSheet("color: #FBBF24; font-weight: bold; font-size: 11pt;")
+                self.lbl_res_stats.setText(f"Tasarruf edilemedi (%{res['ratio']:.1f})\nBu dosya türü (Görsel/Video/Arşiv) zaten sıkıştırılmıştır.\n({orig_str} ➔ {new_str})")
+            else:
+                self.lbl_res_icon.setText("🎉")
+                self.lbl_res_title.setText("Canavar Gibi Sıkıştırıldı!")
+                self.lbl_res_stats.setStyleSheet("color: #10B981; font-weight: bold; font-size: 12pt;")
+                self.lbl_res_stats.setText(f"Tasarruf: %{res['ratio']:.1f}\n({orig_str} ➔ {new_str})")
+        else:
+            self.lbl_res_icon.setText("🎉")
+            self.lbl_res_title.setText("Paket Başarıyla Açıldı!")
+            self.lbl_res_stats.setStyleSheet("color: #10B981; font-weight: bold; font-size: 12pt;")
+            self.lbl_res_stats.setText("Klasörünüz başarıyla geri yüklendi.")
+
+    def handle_error(self, err):
+        self.stack.setCurrentIndex(0)
+        QMessageBox.critical(self, "Hata", f"İşlem başarısız:\n{err}")
+
