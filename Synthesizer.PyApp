@@ -1,3 +1,4 @@
+
 import sys
 import winsound
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QSlider, QPushButton
@@ -90,4 +91,8 @@ class SynthApp(QWidget):
         except Exception as e:
             print(f"Sound error: {e}")
 
-
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = SynthApp()
+    window.show()
+    sys.exit(app.exec())
