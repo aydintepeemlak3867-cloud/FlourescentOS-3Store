@@ -9,10 +9,52 @@ class SynthApp(QWidget):
         self.setWindowTitle("Analog Synth Console")
         self.resize(300, 200)
 
+        # Sekme içinde siyah ekran kalmaması ve buton/slider'ların görünmesi için QSS stili ekleyelim
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #181818;
+                color: #ffffff;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                font-size: 12px;
+            }
+            QLabel {
+                color: #e0e0e0;
+                font-weight: bold;
+            }
+            QPushButton {
+                background-color: #252525;
+                color: #ffffff;
+                border: 1px solid #444444;
+                border-radius: 5px;
+                padding: 6px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #333333;
+                border: 1px solid #007acc;
+            }
+            QSlider::groove:horizontal {
+                border: 1px solid #333333;
+                height: 6px;
+                background: #222222;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #007acc;
+                border: 1px solid #007acc;
+                width: 14px;
+                margin: -4px 0;
+                border-radius: 7px;
+            }
+        """)
+
         layout = QVBoxLayout()
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
 
         self.label_freq = QLabel("Frequency (Hz): 440")
         layout.addWidget(self.label_freq)
+        
         self.slider_freq = QSlider(Qt.Orientation.Horizontal)
         self.slider_freq.setRange(50, 2000)
         self.slider_freq.setValue(440)
@@ -21,13 +63,14 @@ class SynthApp(QWidget):
 
         self.label_dur = QLabel("Duration (ms): 200")
         layout.addWidget(self.label_dur)
+        
         self.slider_dur = QSlider(Qt.Orientation.Horizontal)
         self.slider_dur.setRange(50, 1000)
         self.slider_dur.setValue(200)
         self.slider_dur.valueChanged.connect(self.update_dur)
         layout.addWidget(self.slider_dur)
 
-        self.button = QPushButton("Play Sound")
+        self.button = QPushButton("🔊 Play Sound")
         self.button.clicked.connect(self.play_sound)
         layout.addWidget(self.button)
 
@@ -42,10 +85,9 @@ class SynthApp(QWidget):
     def play_sound(self):
         freq = self.slider_freq.value()
         dur = self.slider_dur.value()
-        winsound.Beep(freq, dur)
+        try:
+            winsound.Beep(freq, dur)
+        except Exception as e:
+            print(f"Sound error: {e}")
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = SynthApp()
-    window.show()
-    sys.exit(app.exec())
+
